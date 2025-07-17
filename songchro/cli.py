@@ -51,9 +51,18 @@ def itunes_list(ctx, songs: bool):
 @click.pass_context
 def itunes_export(ctx, playlist_name: str, output: str):
     """Export an iTunes playlist."""
-    click.echo(f"Exporting iTunes playlist: {playlist_name} (not implemented yet)")
+    click.echo(f"Exporting iTunes playlist: {playlist_name}")
     if output:
         click.echo(f"Output file: {output}")
+        library = ctx.obj["itunes_library"]
+        playlists = (pl for pl in library.playlists if pl.name == playlist_name)
+        playlist = next(playlists, None)
+        if playlist:
+            click.echo(f"Found playlist: {playlist.name}")
+            with open(output, "w") as f:
+                f.write(playlist.to_json())
+        else:
+            click.echo(f"No playlist: {playlist_name}")
 
 
 @cli.group()

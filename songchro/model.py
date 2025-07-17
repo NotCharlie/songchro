@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from typing import List, Union
 
@@ -13,7 +14,20 @@ class Track:
     artist: str
     album: str
     album_artist: str
-    filepath: Path
+    filepath: Union[Path, None]
+
+    def json_data(self) -> dict:
+        data = {
+            "name": self.name,
+            "artist": self.artist,
+            "album": self.album,
+            "album_artist": self.album_artist,
+            "filepath": self.filepath.as_posix(),
+        }
+        return data
+
+    def to_json(self) -> str:
+        return json.dumps(self.json_data())
 
 
 @dataclass
@@ -23,7 +37,20 @@ class Playlist:
     name: str
     tracks: List[Track]
     sub_playlists: List[Playlist]
-    parent_playlist: Union[Playlist, None]
+    parent_playlist: Union[Playlist, None] = field(repr=False)
+
+    def json_data(self):
+        data = {
+            "name": self.name,
+            "tracks": [track.json_data() for track in self.tracks],
+            "sub_playlists": [
+                sub_playlist.json_data() for sub_playlist in self.sub_playlists
+            ],
+        }
+        return data
+
+    def to_json(self) -> str:
+        return json.dumps(self.json_data())
 
 
 @dataclass
@@ -32,3 +59,13 @@ class Library:
 
     tracks: List[Track]
     playlists: List[Playlist]
+
+    def json_data(self) -> dict:
+        data = {
+            "tracks": [track.json_data() for track in self.tracks],
+            "playlists": [playlist.json_data() for playlist in self.playlists],
+        }
+        return data
+
+    def to_json(self) -> str:
+        return json.dumps(self.json_data())

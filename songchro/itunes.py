@@ -1,22 +1,24 @@
 import plistlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
+from urllib.parse import urlparse, unquote
 
 from songchro.model import Library, Track, Playlist
 
 
 @dataclass
 class ItunesTrack(Track):
-    itunes_track: dict
+    itunes_track: dict = field(repr=False)
 
 
 @dataclass
 class ItunesPlaylist(Playlist):
-    itunes_playlist: dict
+    itunes_playlist: dict = field(repr=False)
 
 
 @dataclass
 class ItunesLibrary(Library):
-    itunes_library: dict
+    itunes_library: dict = field(repr=False)
 
 
 def load_library(xml: str) -> ItunesLibrary:
@@ -27,15 +29,17 @@ def load_library(xml: str) -> ItunesLibrary:
     tracks: dict[str, ItunesTrack] = {}
     for track in library["Tracks"].values():
         track_id = track["Track ID"]
+        location = track.get("Location", None)
+        parsed = urlparse(location)
+        path = unquote(parsed.path) if parsed.path else None
+        filepath = Path(path) if path else None
         itunes_track = ItunesTrack(
             itunes_track=track,
             name=track["Name"],
             artist=track.get("Artist", None),
             album=track.get("Album", None),
             album_artist=track.get("Album Artist", None),
-            filepath=track.get(
-                "Location", None
-            ),  # TODO: fix to account for file:/// URL
+            filepath=filepath,
         )
         tracks[str(track_id)] = itunes_track
 
