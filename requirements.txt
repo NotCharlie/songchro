@@ -1,0 +1,4 @@
+plexapi ~= 4.17.0
+requests ~= 2.32.4
+spotipy ~= 2.25.1
+click ~= 8.1.7
