@@ -6,6 +6,7 @@ CLI interface for songchro using Click.
 import click
 
 import songchro.itunes as it
+import songchro.plex as pl
 from . import __version__
 
 
@@ -66,21 +67,51 @@ def itunes_export(ctx, playlist_name: str, output: str):
 
 
 @cli.group()
-def plex():
+@click.option(
+    "--username",
+    "-u",
+    type=str,
+    help="Username for Plex account.",
+)
+@click.option("--password", "-p", type=str, help="Password for Plex account.")
+@click.option("--server", "-s", type=str, help="Plex server name.")
+@click.option("--baseurl", "-b", type=str, help="Base URL for Plex server.")
+@click.option("--token", "-t", type=str, help="Plex API token.")
+@click.option(
+    "--section", type=str, help="Plex section name for Music library.", default="Music"
+)
+@click.pass_context
+def plex(ctx, username, password, server, baseurl, token, section):
     """Commands for working with Plex playlists."""
-    pass
+    if username and password and server:
+        ctx.obj["plex_library"] = pl.load_library_by_username(
+            username, password, server, section
+        )
+    elif baseurl and token:
+        ctx.obj["plex_library"] = pl.load_library_by_baseurl(baseurl, token, section)
+    else:
+        ctx.obj["plex_library"] = pl.load_library(section=section)
 
 
 @plex.command("list")
-def plex_list():
+@click.option("--songs", "-s", is_flag=True, help="Show songs list.")
+@click.pass_context
+def plex_list(ctx, songs: bool):
     """List available Plex playlists."""
-    click.echo("Listing Plex playlists (not implemented yet)")
+    click.echo("Listing Plex playlists")
+    library = ctx.obj["plex_library"]
+    for playlist in library.playlists:
+        click.echo(f"  * {playlist.name}")
+        if songs:
+            for track in playlist.tracks:
+                click.echo(f"    - {track.name} / {track.artist} / {track.album}")
 
 
 @plex.command("import")
 @click.argument("playlist_name")
 @click.option("--input", "-i", type=click.Path(exists=True), help="Input file path")
-def plex_import(playlist_name, input):
+@click.pass_context
+def plex_import(ctx, playlist_name, input):
     """Import a playlist to Plex."""
     click.echo(f"Importing playlist to Plex: {playlist_name} (not implemented yet)")
     if input:

@@ -14,7 +14,7 @@ class Track:
     artist: str
     album: str
     album_artist: str
-    filepath: Union[Path, None]
+    filepath: Path | None
 
     def json_data(self) -> dict:
         data = {
@@ -37,7 +37,7 @@ class Playlist:
     name: str
     tracks: List[Track]
     sub_playlists: List[Playlist]
-    parent_playlist: Union[Playlist, None] = field(repr=False)
+    parent_playlist: Playlist | None = field(repr=False)
 
     def json_data(self):
         data = {
