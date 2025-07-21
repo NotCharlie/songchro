@@ -23,6 +23,19 @@ class PlexPlaylist(model.Playlist):
 class PlexLibrary(model.Library):
     plex_section: MusicSection
 
+    def find_tracks(self, track: model.Track) -> list[model.Track]:
+
+        def matches(plex_track: model.Track) -> bool:
+            artist_match = not track.artist or (track.artist == plex_track.artist)
+            album_artist_match = not track.album_artist or (
+                track.album_artist == plex_track.album_artist
+            )
+            name_match = not track.name or (track.name == plex_track.name)
+            album_match = not track.album or (track.album == plex_track.album)
+            return (artist_match or album_artist_match) and name_match and album_match
+
+        return [plex_track for plex_track in self.tracks if matches(plex_track)]
+
 
 def load_library_by_username(
     username, password, code, server, section="Music"

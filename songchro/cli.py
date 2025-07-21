@@ -2,12 +2,13 @@
 """
 CLI interface for songchro using Click.
 """
+import json
 
 import click
 
 import songchro.itunes as it
 import songchro.plex as pl
-from . import __version__
+from . import __version__, model
 
 
 @click.group()
@@ -123,6 +124,36 @@ def plex_export(ctx, playlist_name: str, output: str):
                 f.write(playlist.to_json())
         else:
             click.echo(f"No playlist: {playlist_name}")
+
+
+@plex.command("find")
+@click.option(
+    "--song-file", "--s", type=click.Path(exists=True), help="Song file json."
+)
+@click.option("--title", "-t", type=str, help="Search title.")
+@click.option("--artist", "-ar", type=str, help="Search artist.")
+@click.option("--album", "-al", type=str, help="Search album.")
+@click.option("--album-artist", "-aa", type=str, help="Search album artist.")
+# @click.option("--filepath", "-f", type=click.Path, help="Search file path.")
+@click.pass_context
+def plex_find(ctx, song_file, title, artist, album, album_artist, filepath=None):
+    """Find a Plex song."""
+    library = ctx.obj["plex_library"]
+    if song_file:
+        click.echo(f"Finding song: {song_file}")
+        with open(song_file) as f:
+            track = model.Track(**json.load(f))
+    else:
+        track = model.Track(
+            name=title,
+            artist=artist,
+            album=album,
+            album_artist=album_artist,
+            filepath=filepath,
+        )
+    plex_tracks = library.find_tracks(track)
+    for plex_track in plex_tracks:
+        click.echo(f"  * {track} -> {plex_track}")
 
 
 @plex.command("import")
