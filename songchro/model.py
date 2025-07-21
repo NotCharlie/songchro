@@ -3,6 +3,7 @@ from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from typing import List, Union
 
+import click
 from plexapi.playlist import Playlist
 
 
@@ -69,3 +70,8 @@ class Library:
 
     def to_json(self) -> str:
         return json.dumps(self.json_data())
+
+    def find_playlist(self, playlist_name: str) -> Playlist | None:
+        playlists = (pl for pl in self.playlists if pl.name == playlist_name)
+        playlist = next(playlists, None)
+        return playlist

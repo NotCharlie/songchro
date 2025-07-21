@@ -56,8 +56,7 @@ def itunes_export(ctx, playlist_name: str, output: str):
     if output:
         click.echo(f"Output file: {output}")
         library = ctx.obj["itunes_library"]
-        playlists = (pl for pl in library.playlists if pl.name == playlist_name)
-        playlist = next(playlists, None)
+        playlist = library.find_playlist(playlist_name)
         if playlist:
             click.echo(f"Found playlist: {playlist.name}")
             with open(output, "w") as f:
@@ -105,6 +104,25 @@ def plex_list(ctx, songs: bool):
         if songs:
             for track in playlist.tracks:
                 click.echo(f"    - {track.name} / {track.artist} / {track.album}")
+
+
+@plex.command("export")
+@click.argument("playlist_name")
+@click.option("--output", "-o", type=click.Path(), help="Output file path")
+@click.pass_context
+def plex_export(ctx, playlist_name: str, output: str):
+    """Export an Plex playlist."""
+    click.echo(f"Exporting Plex playlist: {playlist_name}")
+    if output:
+        click.echo(f"Output file: {output}")
+        library = ctx.obj["plex_library"]
+        playlist = library.find_playlist(playlist_name)
+        if playlist:
+            click.echo(f"Found playlist: {playlist.name}")
+            with open(output, "w") as f:
+                f.write(playlist.to_json())
+        else:
+            click.echo(f"No playlist: {playlist_name}")
 
 
 @plex.command("import")
