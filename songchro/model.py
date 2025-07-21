@@ -1,9 +1,8 @@
 import json
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Union
+from typing import List
 
-import click
 from plexapi.playlist import Playlist
 
 
@@ -71,7 +70,7 @@ class Library:
     def to_json(self) -> str:
         return json.dumps(self.json_data())
 
-    def find_tracks(self, track: Track) -> list[Track]:
+    def find_tracks(self, track: Track) -> List[Track]:
         raise NotImplementedError()
 
     def find_playlist(self, playlist_name: str) -> Playlist | None:
