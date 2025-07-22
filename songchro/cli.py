@@ -3,6 +3,7 @@
 CLI interface for songchro using Click.
 """
 import json
+import os
 
 import click
 
@@ -64,6 +65,19 @@ def itunes_export(ctx, playlist_name: str, output: str):
                 f.write(playlist.to_json())
         else:
             click.echo(f"No playlist: {playlist_name}")
+
+
+@itunes.command("export_all")
+@click.argument("output_dir", type=click.Path())
+@click.pass_context
+def itunes_export_all(ctx, output_dir: str):
+    click.echo(f"Exporting all iTunes playlists: {output_dir}")
+    os.makedirs(output_dir, exist_ok=True)
+    library = ctx.obj["itunes_library"]
+    for playlist in library.playlists:
+        with open(os.path.join(output_dir, f"{playlist.name}.json"), "w") as f:
+            click.echo(f"Exporting playlist: {playlist.name}")
+            f.write(playlist.to_json())
 
 
 @cli.group()

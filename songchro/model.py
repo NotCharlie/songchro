@@ -22,7 +22,7 @@ class Track:
             "artist": self.artist,
             "album": self.album,
             "album_artist": self.album_artist,
-            "filepath": self.filepath.as_posix(),
+            "filepath": self.filepath.as_posix() if self.filepath else None,
         }
         return data
 
@@ -50,7 +50,7 @@ class Playlist:
         return data
 
     def to_json(self) -> str:
-        return json.dumps(self.json_data())
+        return json.dumps(self.json_data(), indent=2)
 
 
 @dataclass
