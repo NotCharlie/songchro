@@ -6,15 +6,17 @@ from typing import List
 from plexapi.playlist import Playlist
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Track:
     """Represent a single song track."""
 
-    name: str
-    artist: str
-    album: str
-    album_artist: str
-    filepath: Path | None
+    name: str = None
+    artist: str = None
+    album: str = None
+    album_artist: str = None
+    disc_number: int | None = None
+    track_number: int | None = None
+    filepath: Path | str | None = None
 
     def json_data(self) -> dict:
         data = {
@@ -22,9 +24,11 @@ class Track:
             "artist": self.artist,
             "album": self.album,
             "album_artist": self.album_artist,
+            "disc_number": self.disc_number,
+            "track_number": self.track_number,
             "filepath": self.filepath.as_posix() if self.filepath else None,
         }
-        return data
+        return {key: value for key, value in data.items() if value}
 
     def to_json(self) -> str:
         return json.dumps(self.json_data())
@@ -71,6 +75,11 @@ class Library:
         return json.dumps(self.json_data())
 
     def find_tracks(self, track: Track) -> List[Track]:
+        raise NotImplementedError()
+
+    def create_playlist(
+        self, playlist_name: str, tracks: List[Track], dry_run=False
+    ) -> Playlist:
         raise NotImplementedError()
 
     def find_playlist(self, playlist_name: str) -> Playlist | None:

@@ -38,7 +38,9 @@ def load_library(xml: str) -> ItunesLibrary:
             name=track["Name"],
             artist=track.get("Artist", None),
             album=track.get("Album", None),
-            album_artist=track.get("Album Artist", None),
+            album_artist=track.get("Album Artist", track.get("Artist", None)),
+            disc_number=track.get("Disc Number", 1),
+            track_number=track.get("Track Number", None),
             filepath=filepath,
         )
         tracks[str(track_id)] = itunes_track

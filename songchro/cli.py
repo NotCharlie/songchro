@@ -3,9 +3,11 @@
 CLI interface for songchro using Click.
 """
 import json
+import logging
 import os
 
 import click
+import structlog
 
 import songchro.itunes as it
 import songchro.plex as pl
@@ -14,10 +16,19 @@ from . import __version__, model
 
 @click.group()
 @click.version_option(version=__version__)
+@click.option("--debug", is_flag=True)
 @click.pass_context
-def cli(ctx):
+def cli(ctx, debug: bool):
     """Synchronize playlists between iTunes and Plex."""
     ctx.ensure_object(dict)
+    if debug:
+        structlog.configure(
+            wrapper_class=structlog.make_filtering_bound_logger(logging.DEBUG)
+        )
+    else:
+        structlog.configure(
+            wrapper_class=structlog.make_filtering_bound_logger(logging.WARNING)
+        )
 
 
 @cli.group()
@@ -144,13 +155,15 @@ def plex_export(ctx, playlist_name: str, output: str):
 @click.option(
     "--song-file", "--s", type=click.Path(exists=True), help="Song file json."
 )
-@click.option("--title", "-t", type=str, help="Search title.")
-@click.option("--artist", "-ar", type=str, help="Search artist.")
-@click.option("--album", "-al", type=str, help="Search album.")
-@click.option("--album-artist", "-aa", type=str, help="Search album artist.")
-# @click.option("--filepath", "-f", type=click.Path, help="Search file path.")
+@click.option("--title", "-t", type=str, default="", help="Search title.")
+@click.option("--artist", "-ar", type=str, default="", help="Search artist.")
+@click.option("--album", "-al", type=str, default="", help="Search album.")
+@click.option(
+    "--album-artist", "-aa", type=str, default="", help="Search album artist."
+)
+@click.option("--filepath", "-f", type=str, default="", help="Search file path.")
 @click.pass_context
-def plex_find(ctx, song_file, title, artist, album, album_artist, filepath=None):
+def plex_find(ctx, song_file, title, artist, album, album_artist, filepath):
     """Find a Plex song."""
     library = ctx.obj["plex_library"]
     if song_file:
@@ -171,14 +184,19 @@ def plex_find(ctx, song_file, title, artist, album, album_artist, filepath=None)
 
 
 @plex.command("import")
-@click.argument("playlist_name")
-@click.option("--input", "-i", type=click.Path(exists=True), help="Input file path")
+@click.argument("input_file", type=click.Path(exists=True))
+@click.option("--dry-run", "-d", is_flag=True, help="Dry run.")
 @click.pass_context
-def plex_import(ctx, playlist_name, input):
+def plex_import(ctx, input_file, dry_run):
     """Import a playlist to Plex."""
-    click.echo(f"Importing playlist to Plex: {playlist_name} (not implemented yet)")
-    if input:
-        click.echo(f"Input file: {input}")
+    library = ctx.obj["plex_library"]
+    click.echo(f"Importing playlist to Plex: from {input_file}")
+    with open(input_file, "r") as f:
+        to_import = json.load(f)
+        playlist_name = to_import["name"]
+        tracks = [model.Track(**track) for track in to_import["tracks"]]
+    click.echo(f"Found playlist: {playlist_name} {len(tracks)} tracks")
+    library.create_playlist(playlist_name, tracks, dry_run=dry_run)
 
 
 @cli.command()

@@ -291,3 +291,4 @@ http-client.private.env.json
 .idea/ApifoxUploaderProjectSetting.xml
 
 .envrc
+playlists/
