@@ -1,6 +1,7 @@
 import plistlib
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Dict, List, Any
 from urllib.parse import urlparse, unquote
 
 from songchro.model import Library, Track, Playlist
@@ -45,7 +46,7 @@ def load_library(xml: str) -> ItunesLibrary:
         )
         tracks[str(track_id)] = itunes_track
 
-    playlists: dict[str, ItunesPlaylist] = {}
+    playlists: Dict[str, Playlist] = {}
     for playlist in library["Playlists"]:
         playlist_tracks = []
         for playlist_item in playlist.get("Playlist Items", []):

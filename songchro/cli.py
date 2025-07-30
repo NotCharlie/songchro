@@ -106,7 +106,15 @@ def itunes_export_all(ctx, output_dir: str):
     "--section", type=str, help="Plex section name for Music library.", default="Music"
 )
 @click.pass_context
-def plex(ctx, username, password, server, baseurl, token, section):
+def plex(
+    ctx,
+    username: str,
+    password: str,
+    server: str,
+    baseurl: str,
+    token: str,
+    section: str,
+):
     """Commands for working with Plex playlists."""
     if username and password and server:
         ctx.obj["plex_library"] = pl.load_library_by_username(
@@ -176,7 +184,15 @@ def plex_export_all(ctx, output_dir: str):
 )
 @click.option("--filepath", "-f", type=str, default="", help="Search file path.")
 @click.pass_context
-def plex_find(ctx, song_file, title, artist, album, album_artist, filepath):
+def plex_find(
+    ctx,
+    song_file: str,
+    title: str,
+    artist: str,
+    album: str,
+    album_artist: str,
+    filepath: str,
+):
     """Find a Plex song."""
     library = ctx.obj["plex_library"]
     if song_file:
@@ -200,7 +216,7 @@ def plex_find(ctx, song_file, title, artist, album, album_artist, filepath):
 @click.argument("input_file", type=click.Path(exists=True))
 @click.option("--dry-run", "-d", is_flag=True, help="Dry run.")
 @click.pass_context
-def plex_import(ctx, input_file, dry_run):
+def plex_import(ctx, input_file: str, dry_run: bool):
     """Import a playlist to Plex."""
     library = ctx.obj["plex_library"]
     click.echo(f"Importing playlist to Plex: from {input_file}")
@@ -227,7 +243,12 @@ def plex_import(ctx, input_file, dry_run):
     default="plex",
     help="Destination playlist type (default: plex)",
 )
-def sync(source_playlist, destination_playlist, source_type, destination_type):
+def sync(
+    source_playlist: str,
+    destination_playlist: str,
+    source_type: str,
+    destination_type: str,
+):
     """Synchronize playlists between platforms.
 
     If DESTINATION_PLAYLIST is not provided, the SOURCE_PLAYLIST name will be used.

@@ -1,9 +1,7 @@
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List
-
-from plexapi.playlist import Playlist
+from typing import List, Iterable, Dict, Any
 
 
 @dataclass(kw_only=True)
@@ -18,7 +16,7 @@ class Track:
     track_number: int | None = None
     filepath: Path | str | None = None
 
-    def json_data(self) -> dict:
+    def json_data(self) -> Dict[str, Any]:
         data = {
             "name": self.name,
             "artist": self.artist,
@@ -43,15 +41,14 @@ class Playlist:
     sub_playlists: List[Playlist]
     parent_playlist: Playlist | None = field(repr=False)
 
-    def json_data(self):
-        data = {
+    def json_data(self) -> Dict[str, Any]:
+        return {
             "name": self.name,
             "tracks": [track.json_data() for track in self.tracks],
             "sub_playlists": [
                 sub_playlist.json_data() for sub_playlist in self.sub_playlists
             ],
         }
-        return data
 
     def to_json(self) -> str:
         return json.dumps(self.json_data(), indent=2)
@@ -64,7 +61,7 @@ class Library:
     tracks: List[Track]
     playlists: List[Playlist]
 
-    def json_data(self) -> dict:
+    def json_data(self) -> Dict[str, Any]:
         data = {
             "tracks": [track.json_data() for track in self.tracks],
             "playlists": [playlist.json_data() for playlist in self.playlists],

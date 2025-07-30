@@ -288,7 +288,7 @@ def load_library_by_username(
     return load_library(plex, section=section)
 
 
-def load_library_by_baseurl(baseurl, token, section="Music"):
+def load_library_by_baseurl(baseurl, token, section="Music") -> PlexLibrary:
     plex = PlexServer(baseurl, token)
     return load_library(plex, section=section)
 
