@@ -151,6 +151,19 @@ def plex_export(ctx, playlist_name: str, output: str):
             click.echo(f"No playlist: {playlist_name}")
 
 
+@plex.command("export_all")
+@click.argument("output_dir", type=click.Path())
+@click.pass_context
+def plex_export_all(ctx, output_dir: str):
+    click.echo(f"Exporting all Plex playlists: {output_dir}")
+    os.makedirs(output_dir, exist_ok=True)
+    library = ctx.obj["plex_library"]
+    for playlist in library.playlists:
+        with open(os.path.join(output_dir, f"{playlist.name}.json"), "w") as f:
+            click.echo(f"Exporting playlist: {playlist.name}")
+            f.write(playlist.to_json())
+
+
 @plex.command("find")
 @click.option(
     "--song-file", "--s", type=click.Path(exists=True), help="Song file json."

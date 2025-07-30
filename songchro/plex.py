@@ -38,6 +38,8 @@ class PlexPlaylist(model.Playlist):
                 album=track.album().title,
                 filepath=Path(track.locations[0]),
                 album_artist=track.album().artist().title,
+                disc_number=track.parentIndex,
+                track_number=track.index,
             )
             for track in self.plex_playlist.items()
         ]
