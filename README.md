@@ -14,6 +14,7 @@ pip install -e .
 
 # Copy .envrc template & modify
 cp envrc.template .envrc
+chmod 600 .envrc
 vi .envrc
 ```
 
