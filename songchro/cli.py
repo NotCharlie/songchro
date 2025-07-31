@@ -5,6 +5,7 @@ CLI interface for songchro using Click.
 import json
 import logging
 import os
+from pathlib import Path
 
 import click
 import structlog
@@ -17,8 +18,14 @@ from . import __version__, model
 @click.group()
 @click.version_option(version=__version__)
 @click.option("--debug", is_flag=True)
+@click.option(
+    "--music_root",
+    type=click.Path(),
+    default=None,
+    help="Path to Music root.  Will be stripped in resulting playlist files.",
+)
 @click.pass_context
-def cli(ctx, debug: bool):
+def cli(ctx, debug: bool, music_root: str):
     """Synchronize playlists between iTunes and Plex."""
     ctx.ensure_object(dict)
     if debug:
@@ -29,6 +36,7 @@ def cli(ctx, debug: bool):
         structlog.configure(
             wrapper_class=structlog.make_filtering_bound_logger(logging.WARNING)
         )
+    ctx.obj["music_root"] = music_root if music_root else "/"
 
 
 @cli.group()
@@ -42,7 +50,8 @@ def cli(ctx, debug: bool):
 )
 def itunes(ctx, xml: str):
     """Commands for working with iTunes playlists."""
-    ctx.obj["itunes_library"] = it.load_library(xml)
+    music_root = ctx.obj["music_root"]
+    ctx.obj["itunes_library"] = it.load_library(xml, music_root)
 
 
 @itunes.command("list")
@@ -99,6 +108,7 @@ def itunes_export_all(ctx, output_dir: str):
     help="Username for Plex account.",
 )
 @click.option("--password", "-p", type=str, help="Password for Plex account.")
+@click.option("--code", "-c", type=str, help="OTP code for Plex account.")
 @click.option("--server", "-s", type=str, help="Plex server name.")
 @click.option("--baseurl", "-b", type=str, help="Base URL for Plex server.")
 @click.option("--token", "-t", type=str, help="Plex API token.")
@@ -110,20 +120,24 @@ def plex(
     ctx,
     username: str,
     password: str,
+    code: str,
     server: str,
     baseurl: str,
     token: str,
     section: str,
 ):
     """Commands for working with Plex playlists."""
+    music_root = ctx.obj["music_root"]
     if username and password and server:
         ctx.obj["plex_library"] = pl.load_library_by_username(
-            username, password, server, section
+            username, password, code, server, music_root, section=section
         )
     elif baseurl and token:
-        ctx.obj["plex_library"] = pl.load_library_by_baseurl(baseurl, token, section)
+        ctx.obj["plex_library"] = pl.load_library_by_baseurl(
+            baseurl, token, music_root, section=section
+        )
     else:
-        ctx.obj["plex_library"] = pl.load_library(section=section)
+        ctx.obj["plex_library"] = pl.load_library(music_root, section=section)
 
 
 @plex.command("list")
@@ -145,7 +159,7 @@ def plex_list(ctx, songs: bool):
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
 @click.pass_context
 def plex_export(ctx, playlist_name: str, output: str):
-    """Export an Plex playlist."""
+    """Export a Plex playlist."""
     click.echo(f"Exporting Plex playlist: {playlist_name}")
     if output:
         click.echo(f"Output file: {output}")
@@ -195,6 +209,7 @@ def plex_find(
 ):
     """Find a Plex song."""
     library = ctx.obj["plex_library"]
+    music_root = ctx.obj["music_root"]
     if song_file:
         click.echo(f"Finding song: {song_file}")
         with open(song_file) as f:
@@ -205,7 +220,7 @@ def plex_find(
             artist=artist,
             album=album,
             album_artist=album_artist,
-            filepath=filepath,
+            filepath=Path(os.path.relpath(filepath, start=music_root)),
         )
     plex_tracks = library.find_tracks(track)
     for plex_track in plex_tracks:

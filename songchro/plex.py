@@ -1,3 +1,4 @@
+import os.path
 import re
 from dataclasses import dataclass
 from functools import cached_property
@@ -23,9 +24,10 @@ class PlexTrack(model.Track):
 
 
 class PlexPlaylist(model.Playlist):
-    def __init__(self, plex_playlist: playlist.Playlist):
+    def __init__(self, plex_playlist: playlist.Playlist, plex_lib: "PlexLibrary"):
         super().__init__(plex_playlist.title)
         self.plex_playlist = plex_playlist
+        self.plex_lib = plex_lib
 
     @cached_property
     def tracks(self) -> List[model.Track]:
@@ -35,7 +37,9 @@ class PlexPlaylist(model.Playlist):
                 name=track.title,
                 artist=track.artist().title,
                 album=track.album().title,
-                filepath=Path(track.locations[0]),
+                filepath=Path(
+                    os.path.relpath(track.locations[0], start=self.plex_lib.music_root)
+                ),
                 album_artist=track.album().artist().title,
                 disc_number=track.parentIndex,
                 track_number=track.index,
@@ -57,7 +61,8 @@ class PlexSmartPlaylist(model.SmartPlaylist):
 
 
 class PlexLibrary(model.Library):
-    def __init__(self, music: MusicSection):
+    def __init__(self, music_root: Path, music: MusicSection):
+        super().__init__(music_root)
         self.music = music
 
     @cached_property
@@ -68,7 +73,9 @@ class PlexLibrary(model.Library):
                 name=track.title,
                 artist=track.artist().title,
                 album=track.album().title,
-                filepath=Path(track.locations[0]),
+                filepath=Path(
+                    os.path.relpath(track.locations[0], start=self.music_root)
+                ),
                 album_artist=track.album().artist().title,
             )
             for track in self.music.searchTracks()
@@ -81,7 +88,7 @@ class PlexLibrary(model.Library):
             if pl.smart:
                 result.append(PlexSmartPlaylist(pl))
             else:
-                result.append(PlexPlaylist(pl))
+                result.append(PlexPlaylist(pl, self))
         return result
 
     @staticmethod
@@ -257,7 +264,9 @@ class PlexLibrary(model.Library):
                 name=track.title,
                 artist=track.artist().title,
                 album=track.album().title,
-                filepath=Path(track.locations[0]),
+                filepath=Path(
+                    os.path.relpath(track.locations[0], start=self.music_root)
+                ),
                 album_artist=track.album().artist().title,
                 track_number=track.trackNumber,
                 disc_number=track.parentIndex,
@@ -298,18 +307,18 @@ class PlexLibrary(model.Library):
 
 
 def load_library_by_username(
-    username, password, code, server, section="Music"
+    username, password, code, server, music_root, section="Music"
 ) -> PlexLibrary:
     account = MyPlexAccount(username, password, code=code)
     plex = account.resource(server).connect()
-    return load_library(plex, section=section)
+    return load_library(music_root, plex=plex, section=section)
 
 
-def load_library_by_baseurl(baseurl, token, section="Music") -> PlexLibrary:
+def load_library_by_baseurl(baseurl, token, music_root, section="Music") -> PlexLibrary:
     plex = PlexServer(baseurl, token)
-    return load_library(plex, section=section)
+    return load_library(music_root, plex=plex, section=section)
 
 
-def load_library(plex: PlexServer = None, section="Music") -> PlexLibrary:
+def load_library(music_root, plex: PlexServer = None, section="Music") -> PlexLibrary:
     plex = plex if plex else PlexServer()
-    return PlexLibrary(music=plex.library.section(section))
+    return PlexLibrary(music_root=Path(music_root), music=plex.library.section(section))

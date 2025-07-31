@@ -15,7 +15,7 @@ class Track:
     album_artist: str = None
     disc_number: int | None = None
     track_number: int | None = None
-    filepath: Path | str | None = None
+    filepath: Path | None = None
 
     def json_data(self) -> Dict[str, Any]:
         data = {
@@ -88,12 +88,26 @@ class SmartPlaylist(Playlist):
         raise NotImplementedError()
 
 
-@dataclass
 class Library:
     """Represent a library of songs."""
 
-    tracks: List[Track]
-    playlists: List[Playlist]
+    def __init__(
+        self,
+        music_root: Path,
+        tracks: List[Track] = None,
+        playlists: List[Playlist] = None,
+    ):
+        self.music_root = music_root
+        self._tracks = tracks if tracks else []
+        self._playlists = playlists if playlists else []
+
+    @property
+    def tracks(self) -> Iterable[Track]:
+        return self._tracks
+
+    @property
+    def playlists(self) -> List[Playlist]:
+        return self._playlists
 
     def json_data(self) -> Dict[str, Any]:
         data = {

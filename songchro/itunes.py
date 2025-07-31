@@ -1,7 +1,8 @@
+import os
 import plistlib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List
 from urllib.parse import urlparse, unquote
 
 from songchro.model import Library, Track, Playlist, SmartPlaylist, PlaylistFolder
@@ -33,12 +34,19 @@ class ItunesPlaylistFolder(PlaylistFolder):
         self.itunes_playlist = itunes_playlist
 
 
-@dataclass
 class ItunesLibrary(Library):
-    itunes_library: dict = field(repr=False)
+    def __init__(
+        self,
+        music_root: Path,
+        itunes_library: Dict,
+        tracks: List[ItunesTrack],
+        playlists: List[ItunesPlaylist],
+    ):
+        super().__init__(music_root, tracks, playlists)
+        self.itunes_library = itunes_library
 
 
-def load_library(xml: str) -> ItunesLibrary:
+def load_library(xml: str, music_root: str) -> ItunesLibrary:
     """Load an iTunes library."""
     with open(xml, "rb") as f:
         library = plistlib.load(f)
@@ -49,7 +57,7 @@ def load_library(xml: str) -> ItunesLibrary:
         location = track.get("Location", None)
         parsed = urlparse(location)
         path = unquote(parsed.path) if parsed.path else None
-        filepath = Path(path) if path else None
+        filepath = Path(os.path.relpath(path, start=music_root)) if path else None
         itunes_track = ItunesTrack(
             itunes_track=track,
             name=track["Name"],
@@ -110,4 +118,5 @@ def load_library(xml: str) -> ItunesLibrary:
         itunes_library=library,
         tracks=list(tracks.values()),
         playlists=list(playlists.values()),
+        music_root=Path(music_root),
     )
