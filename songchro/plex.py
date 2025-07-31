@@ -281,6 +281,7 @@ class PlexLibrary(model.Library):
         if not dry_run:
             try:
                 self.music.playlist(playlist_name)
+                log.critical("existing playlist", playlist_name=playlist_name)
                 return None
             except NotFound:
                 pass  # expected case
@@ -296,13 +297,13 @@ class PlexLibrary(model.Library):
             else:
                 plex_tracks.append(plex_track[0])
         if not errors and not dry_run:
-            playlist = self.music.createPlaylist(
+            new_playlist = self.music.createPlaylist(
                 playlist_name, [tr.plex_track for tr in plex_tracks]
             )
-            return PlexPlaylist(playlist)
-        print(f"Found {len(errors)} errors")
+            return PlexPlaylist(new_playlist, self)
+        log.info(f"Found {len(errors)} errors")
         for index, error in enumerate(errors):
-            print(f"  {index+1}. {error}")
+            log.warn(f"  {index+1}. {error}")
         return None
 
 

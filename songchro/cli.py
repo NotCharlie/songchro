@@ -240,7 +240,11 @@ def plex_import(ctx, input_file: str, dry_run: bool):
         playlist_name = to_import["name"]
         tracks = [model.Track(**track) for track in to_import.get("tracks", [])]
     click.echo(f"Found playlist: {playlist_name} {len(tracks)} tracks")
-    library.create_playlist(playlist_name, tracks, dry_run=dry_run)
+    new_playlist = library.create_playlist(playlist_name, tracks, dry_run=dry_run)
+    if new_playlist:
+        click.echo(f"Created new playlist: {new_playlist.name}")
+    else:
+        click.echo(f"No new playlist: {playlist_name}")
 
 
 @cli.command()
