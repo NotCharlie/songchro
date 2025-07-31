@@ -70,21 +70,27 @@ def itunes_list(ctx, songs: bool):
 
 @itunes.command("export")
 @click.argument("playlist_name")
-@click.option("--output", "-o", type=click.Path(), help="Output file path")
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(),
+    help="Output file path. Default <playlist_name>.json",
+)
 @click.pass_context
 def itunes_export(ctx, playlist_name: str, output: str):
     """Export an iTunes playlist."""
     click.echo(f"Exporting iTunes playlist: {playlist_name}")
-    if output:
-        click.echo(f"Output file: {output}")
-        library = ctx.obj["itunes_library"]
-        playlist = library.find_playlist(playlist_name)
-        if playlist:
-            click.echo(f"Found playlist: {playlist.name}")
-            with open(output, "w") as f:
-                f.write(playlist.to_json())
-        else:
-            click.echo(f"No playlist: {playlist_name}")
+    if not output:
+        output = playlist_name + ".json"
+    click.echo(f"Output file: {output}")
+    library = ctx.obj["itunes_library"]
+    playlist = library.find_playlist(playlist_name)
+    if playlist:
+        click.echo(f"Found playlist: {playlist.name}")
+        with open(output, "w") as f:
+            f.write(playlist.to_json())
+    else:
+        click.echo(f"No playlist: {playlist_name}")
 
 
 @itunes.command("export_all")
@@ -156,21 +162,27 @@ def plex_list(ctx, songs: bool):
 
 @plex.command("export")
 @click.argument("playlist_name")
-@click.option("--output", "-o", type=click.Path(), help="Output file path")
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(),
+    help="Output file path. Default <playlist_name>.json",
+)
 @click.pass_context
 def plex_export(ctx, playlist_name: str, output: str):
     """Export a Plex playlist."""
     click.echo(f"Exporting Plex playlist: {playlist_name}")
-    if output:
-        click.echo(f"Output file: {output}")
-        library = ctx.obj["plex_library"]
-        playlist = library.find_playlist(playlist_name)
-        if playlist:
-            click.echo(f"Found playlist: {playlist.name}")
-            with open(output, "w") as f:
-                f.write(playlist.to_json())
-        else:
-            click.echo(f"No playlist: {playlist_name}")
+    if not output:
+        output = playlist_name + ".json"
+    click.echo(f"Output file: {output}")
+    library = ctx.obj["plex_library"]
+    playlist = library.find_playlist(playlist_name)
+    if playlist:
+        click.echo(f"Found playlist: {playlist.name}")
+        with open(output, "w") as f:
+            f.write(playlist.to_json())
+    else:
+        click.echo(f"No playlist: {playlist_name}")
 
 
 @plex.command("export_all")
