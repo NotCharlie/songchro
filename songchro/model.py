@@ -1,5 +1,6 @@
+import itertools
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Iterable, Dict, Any
 
@@ -32,26 +33,59 @@ class Track:
         return json.dumps(self.json_data())
 
 
-@dataclass
 class Playlist:
     """Represent a playlist."""
 
-    name: str
-    tracks: List[Track]
-    sub_playlists: List[Playlist]
-    parent_playlist: Playlist | None = field(repr=False)
+    def __init__(self, name: str, tracks: List[Track] = None):
+        self.name = name
+        self._tracks: List[Track] = tracks if tracks is not None else []
 
     def json_data(self) -> Dict[str, Any]:
         return {
             "name": self.name,
             "tracks": [track.json_data() for track in self.tracks],
-            "sub_playlists": [
-                sub_playlist.json_data() for sub_playlist in self.sub_playlists
-            ],
         }
 
     def to_json(self) -> str:
         return json.dumps(self.json_data(), indent=2)
+
+    @property
+    def tracks(self) -> Iterable[Track]:
+        return self._tracks
+
+
+class PlaylistFolder(Playlist):
+    def __init__(self, name: str, sub_playlists: List[Playlist]):
+        super().__init__(name)
+        self.sub_playlists = sub_playlists
+
+    def json_data(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "sub_playlists": [playlist.name for playlist in self.sub_playlists],
+        }
+
+    @property
+    def tracks(self) -> Iterable[Track]:
+        return itertools.chain.from_iterable(
+            playlist.tracks for playlist in self.sub_playlists
+        )
+
+
+class SmartPlaylist(Playlist):
+    def __init__(self, name: str, smart_criteria):
+        super().__init__(name)
+        self.smart_criteria = smart_criteria
+
+    def json_data(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "smart_criteria": self.smart_criteria,
+        }
+
+    @property
+    def tracks(self) -> Iterable[Track]:
+        raise NotImplementedError()
 
 
 @dataclass

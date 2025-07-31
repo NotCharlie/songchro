@@ -24,9 +24,8 @@ class PlexTrack(model.Track):
 
 class PlexPlaylist(model.Playlist):
     def __init__(self, plex_playlist: playlist.Playlist):
+        super().__init__(plex_playlist.title)
         self.plex_playlist = plex_playlist
-        self.name = plex_playlist.title
-        self.sub_playlists = []
 
     @cached_property
     def tracks(self) -> List[model.Track]:
@@ -43,6 +42,18 @@ class PlexPlaylist(model.Playlist):
             )
             for track in self.plex_playlist.items()
         ]
+
+
+class PlexSmartPlaylist(model.SmartPlaylist):
+    def __init__(self, plex_playlist: playlist.Playlist):
+        super().__init__(plex_playlist.title, "TODO")
+        self.plex_playlist = plex_playlist
+        self.plex_filters = plex_playlist.filters()
+
+    def json_data(self) -> Dict[str, Any]:
+        data = super().json_data()
+        data["filters"] = self.plex_filters
+        return data
 
 
 class PlexLibrary(model.Library):
@@ -65,7 +76,13 @@ class PlexLibrary(model.Library):
 
     @cached_property
     def playlists(self) -> List[model.Playlist]:
-        return [PlexPlaylist(pl) for pl in self.music.playlists()]
+        result = []
+        for pl in self.music.playlists():
+            if pl.smart:
+                result.append(PlexSmartPlaylist(pl))
+            else:
+                result.append(PlexPlaylist(pl))
+        return result
 
     @staticmethod
     def _perform_replacements(input: str) -> Set[str]:

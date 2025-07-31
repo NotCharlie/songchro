@@ -223,7 +223,7 @@ def plex_import(ctx, input_file: str, dry_run: bool):
     with open(input_file, "r") as f:
         to_import = json.load(f)
         playlist_name = to_import["name"]
-        tracks = [model.Track(**track) for track in to_import["tracks"]]
+        tracks = [model.Track(**track) for track in to_import.get("tracks", [])]
     click.echo(f"Found playlist: {playlist_name} {len(tracks)} tracks")
     library.create_playlist(playlist_name, tracks, dry_run=dry_run)
 
