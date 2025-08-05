@@ -37,6 +37,9 @@ class ItunesPlaylist(Playlist):
         super().__init__(name, library, tracks=tracks)
         self.itunes_playlist = itunes_playlist
 
+    def sync_tracks(self, other: "Playlist", /, dry_run=False):
+        raise NotImplemented
+
 
 class ItunesSmartPlaylist(SmartPlaylist):
     def __init__(
