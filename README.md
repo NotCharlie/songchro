@@ -31,13 +31,11 @@ songchro --help
 # Show version
 songchro --version
 
-# Enable debug logging
+# Enable debug level logging
 songchro --debug [COMMAND]
 
-# Synchronize playlists
-songchro sync "My Playlist" 
-songchro sync "Source Playlist" "Destination Playlist"
-songchro sync "My Playlist" --source-type plex --destination-type itunes
+# Enable info level logging
+songchro --info [COMMAND]
 ```
 
 ### iTunes Commands
@@ -91,4 +89,13 @@ songchro plex find --filepath "/path/to/music/file.mp3"
 # Import a playlist to Plex
 songchro plex import "/path/to/playlist.json"
 songchro plex import "/path/to/playlist.json" --dry-run
+```
+
+### Sync playlists
+
+```bash
+# Synchronize playlists
+songchro sync "My Playlist" 
+songchro sync --source-type plex --destination-type local --plex-music-root /music/ "My Playlist"
+songchro sync --source-type plex --destination-type local --plex-music-root /music/ "My Playlist" --local-music-root $HOME/media/music/ --dry-run
 ```
