@@ -50,6 +50,33 @@ def cli(ctx, debug: bool, info: bool, music_root: str):
 @cli.group()
 @click.pass_context
 @click.option(
+    "--local-root",
+    type=click.Path(exists=True),
+    help="Root directory for local playlist files.",
+)
+def local(ctx, local_root: str):
+    music_root = ctx.obj["music_root"]
+    ctx.obj["local_library"] = file_library.load_library(local_root, music_root)
+
+
+@local.command("list")
+@click.pass_context
+@click.option("--songs", "-s", is_flag=True, help="Show all songs.")
+def local_list(ctx, songs: bool):
+    library = ctx.obj["local_library"]
+    click.echo("Listing local playlists:")
+    for playlist in (
+        p for p in library.playlists if not isinstance(p, model.SmartPlaylist)
+    ):
+        click.echo(f"  * {playlist.name}")
+        if songs:
+            for track in playlist.tracks:
+                click.echo(f"    - {track.name} / {track.artist} / {track.album}")
+
+
+@cli.group()
+@click.pass_context
+@click.option(
     "--xml",
     "-x",
     required=True,
@@ -69,7 +96,9 @@ def itunes_list(ctx, songs: bool):
     """List available iTunes playlists."""
     library = ctx.obj["itunes_library"]
     click.echo("Listing iTunes playlists:")
-    for playlist in library.playlists:
+    for playlist in (
+        p for p in library.playlists if not isinstance(p, model.SmartPlaylist)
+    ):
         click.echo(f"  * {playlist.name}")
         if songs:
             for track in playlist.tracks:
