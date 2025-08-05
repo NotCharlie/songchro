@@ -5,6 +5,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import List, Set, Dict, Any, Iterable
 
+import structlog
 from plexapi import playlist, audio
 from plexapi.exceptions import NotFound
 from plexapi.library import MusicSection
@@ -13,8 +14,6 @@ from plexapi.server import PlexServer
 
 from songchro import model
 
-import structlog
-
 log = structlog.get_logger()
 
 
@@ -22,12 +21,22 @@ log = structlog.get_logger()
 class PlexTrack(model.Track):
     plex_track: audio.Track
 
+    def key(self):
+        return self.plex_track.key
+
+    def __hash__(self):
+        return hash(self.key())
+
+    def __eq__(self, other):
+        if isinstance(other, PlexTrack):
+            return self.key() == other.key()
+        return NotImplemented
+
 
 class PlexPlaylist(model.Playlist):
     def __init__(self, plex_playlist: playlist.Playlist, plex_lib: "PlexLibrary"):
-        super().__init__(plex_playlist.title)
+        super().__init__(plex_playlist.title, plex_lib)
         self.plex_playlist = plex_playlist
-        self.plex_lib = plex_lib
 
     @cached_property
     def tracks(self) -> List[model.Track]:
@@ -38,7 +47,7 @@ class PlexPlaylist(model.Playlist):
                 artist=track.artist().title,
                 album=track.album().title,
                 filepath=Path(
-                    os.path.relpath(track.locations[0], start=self.plex_lib.music_root)
+                    os.path.relpath(track.locations[0], start=self.library.music_root)
                 ),
                 album_artist=track.album().artist().title,
                 disc_number=track.parentIndex,
@@ -47,10 +56,22 @@ class PlexPlaylist(model.Playlist):
             for track in self.plex_playlist.items()
         ]
 
+    def _add_item(self, track: model.Track, after):
+        if isinstance(track, PlexTrack) and (
+            isinstance(after, PlexTrack) or after is None
+        ):
+            self.plex_playlist.addItems([track.plex_track])
+            self.plex_playlist.reload()  # TODO: figure out why @cached_data_property on _items not forcing reload
+            self.plex_playlist.moveItem(
+                track.plex_track, after.plex_track if after else None
+            )
+        else:
+            raise RuntimeError(f"incorrect track type: {type(track)} or {type(after)}")
+
 
 class PlexSmartPlaylist(model.SmartPlaylist):
-    def __init__(self, plex_playlist: playlist.Playlist):
-        super().__init__(plex_playlist.title, "TODO")
+    def __init__(self, plex_playlist: playlist.Playlist, plex_lib: "PlexLibrary"):
+        super().__init__(plex_playlist.title, "TODO", plex_lib)
         self.plex_playlist = plex_playlist
         self.plex_filters = plex_playlist.filters()
 
@@ -86,7 +107,7 @@ class PlexLibrary(model.Library):
         result = []
         for pl in self.music.playlists():
             if pl.smart:
-                result.append(PlexSmartPlaylist(pl))
+                result.append(PlexSmartPlaylist(pl, self))
             else:
                 result.append(PlexPlaylist(pl, self))
         return result
@@ -257,7 +278,7 @@ class PlexLibrary(model.Library):
                             tightest_match = tracks
         return tightest_match
 
-    def find_tracks(self, to_find: model.Track) -> List[model.Track]:
+    def find_track(self, to_find: model.Track) -> List[model.Track]:
         return [
             PlexTrack(
                 plex_track=track,
@@ -274,20 +295,13 @@ class PlexLibrary(model.Library):
             for track in self._find_tightest_match(to_find)
         ]
 
-    def create_playlist(
-        self, playlist_name: str, tracks: List[model.Track], dry_run=False
-    ) -> model.Playlist | None:
+    def map_tracks(
+        self, tracks: Iterable[model.Track], /, dry_run: bool = False
+    ) -> List[PlexTrack]:
         errors = []
-        if not dry_run:
-            try:
-                self.music.playlist(playlist_name)
-                log.critical("existing playlist", playlist_name=playlist_name)
-                return None
-            except NotFound:
-                pass  # expected case
-        plex_tracks = []
+        result = []
         for track in tracks:
-            plex_track = self.find_tracks(track)
+            plex_track = self.find_track(track)
             if len(plex_track) != 1:
                 msg = f"Found {len(plex_track)} tracks for {track}"
                 if dry_run:
@@ -295,16 +309,31 @@ class PlexLibrary(model.Library):
                 else:
                     raise RuntimeError(msg)
             else:
-                plex_tracks.append(plex_track[0])
-        if not errors and not dry_run:
+                result.append(plex_track[0])
+        log.info(f"done with map_tracks", errors=errors)
+        if errors:
+            for index, error in enumerate(errors):
+                log.error(f"  {index+1}. {error}")
+            raise RuntimeError(f"Found {len(errors)} tracks for {tracks}")
+        return result
+
+    def create_playlist(
+        self, playlist_name: str, tracks: List[model.Track], dry_run=False
+    ) -> None:
+        if not dry_run:
+            try:
+                self.music.playlist(playlist_name)
+                log.critical("existing playlist", playlist_name=playlist_name)
+                raise RuntimeError(f"existing playlist {playlist_name}")
+            except NotFound:
+                pass  # expected case
+        plex_tracks = self.map_tracks(tracks, dry_run=dry_run)
+        if not dry_run:
             new_playlist = self.music.createPlaylist(
                 playlist_name, [tr.plex_track for tr in plex_tracks]
             )
-            return PlexPlaylist(new_playlist, self)
-        log.info(f"Found {len(errors)} errors")
-        for index, error in enumerate(errors):
-            log.warn(f"  {index+1}. {error}")
-        return None
+            if "playlists" in self.__dict__:
+                self.playlists.append(PlexPlaylist(new_playlist, self))
 
 
 def load_library_by_username(
