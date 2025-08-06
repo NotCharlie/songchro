@@ -22,10 +22,10 @@ def export_playlist(source: model.Library, name: str, target: model.Library) -> 
     click.echo(f"Exporting {source.source} playlist: {name}")
     playlist = source.find_playlist(name)
     if playlist:
-        click.echo(f"Found playlist: {name}")
+        click.echo(f"Found {source.source} playlist: {name}")
         target.create_playlist(name, playlist.tracks)
     else:
-        click.echo(f"No playlist: {name}")
+        click.echo(f"No {source.source} playlist: {name}")
 
 
 def export_all_playlists(source: model.Library, target: model.Library) -> None:
@@ -42,12 +42,12 @@ def import_playlist(
     click.echo(f"Importing playlist to {target.source} from {source.source} {name}")
     playlist = source.find_playlist(name)
     if playlist:
-        click.echo(f"Found playlist: {name}")
+        click.echo(f"Found {source.source} playlist: {name}")
         target.create_playlist(name, playlist.tracks, dry_run=dry_run)
         if not dry_run:
             new_playlist = target.find_playlist(name)
-            click.echo(f"Created new playlist: {new_playlist.name}")
+            click.echo(f"Created new {target.source} playlist: {new_playlist.name}")
         else:
-            click.echo(f"No new playlist: {name}")
+            click.echo(f"DRY-RUN: skip creating {target.source} playlist {name}")
     else:
-        click.echo(f"No playlist: {name} in {source.source}")
+        click.echo(f"No {source.source} playlist: {name}")

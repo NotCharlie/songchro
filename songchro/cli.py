@@ -37,17 +37,11 @@ def cli(ctx, debug: bool, info: bool, file_root: str, file_music_root: str):
     """Synchronize playlists between iTunes and Plex."""
     ctx.ensure_object(dict)
     if debug:
-        structlog.configure(
-            wrapper_class=structlog.make_filtering_bound_logger(logging.DEBUG)
-        )
+        structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(logging.DEBUG))
     elif info:
-        structlog.configure(
-            wrapper_class=structlog.make_filtering_bound_logger(logging.INFO)
-        )
+        structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(logging.INFO))
     else:
-        structlog.configure(
-            wrapper_class=structlog.make_filtering_bound_logger(logging.WARNING)
-        )
+        structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(logging.WARNING))
     ctx.obj["file_library"] = fl.load_library(file_root, file_music_root)
 
 
@@ -125,9 +119,7 @@ def itunes_export_all(ctx):
 @click.option("--server", "-s", type=str, help="Plex server name.")
 @click.option("--baseurl", "-b", type=str, help="Base URL for Plex server.")
 @click.option("--token", "-t", type=str, help="Plex API token.")
-@click.option(
-    "--section", type=str, help="Plex section name for Music library.", default="Music"
-)
+@click.option("--section", type=str, help="Plex section name for Music library.", default="Music")
 @click.option("--plex-music-root", type=click.Path(), help="Plex music root path.")
 @click.pass_context
 def plex(
@@ -147,9 +139,7 @@ def plex(
             username, password, code, server, plex_music_root, section=section
         )
     elif baseurl and token:
-        ctx.obj["plex_library"] = pl.load_library_by_baseurl(
-            baseurl, token, plex_music_root, section=section
-        )
+        ctx.obj["plex_library"] = pl.load_library_by_baseurl(baseurl, token, plex_music_root, section=section)
     else:
         ctx.obj["plex_library"] = pl.load_library(plex_music_root, section=section)
 
@@ -183,15 +173,11 @@ def plex_export_all(ctx):
 
 
 @plex.command("find")
-@click.option(
-    "--song-file", "--s", type=click.Path(exists=True), help="Song file json."
-)
+@click.option("--song-file", "--s", type=click.Path(exists=True), help="Song file json.")
 @click.option("--title", "-t", type=str, default="", help="Search title.")
 @click.option("--artist", "-ar", type=str, default="", help="Search artist.")
 @click.option("--album", "-al", type=str, default="", help="Search album.")
-@click.option(
-    "--album-artist", "-aa", type=str, default="", help="Search album artist."
-)
+@click.option("--album-artist", "-aa", type=str, default="", help="Search album artist.")
 @click.option("--filepath", "-f", type=str, default="", help="Search file path.")
 @click.pass_context
 def plex_find(
@@ -278,9 +264,7 @@ def sync(
 ):
     """Synchronize playlists between platforms."""
 
-    click.echo(
-        f"Syncing from {source_type} to {destination_type} for playlist '{playlist}' "
-    )
+    click.echo(f"Syncing from {source_type} to {destination_type} for playlist '{playlist}' ")
     libs: dict[str, model.Library] = {}
     if source_type == "itunes" or destination_type == "itunes":
         itunes_library = it.load_library(xml, itunes_music_root)
