@@ -6,7 +6,6 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Dict
 
 import click
 import structlog
@@ -282,7 +281,7 @@ def sync(
     click.echo(
         f"Syncing from {source_type} to {destination_type} for playlist '{playlist}' "
     )
-    libs: Dict[str, model.Library] = {}
+    libs: dict[str, model.Library] = {}
     if source_type == "itunes" or destination_type == "itunes":
         itunes_library = it.load_library(xml, itunes_music_root)
         libs["itunes"] = itunes_library

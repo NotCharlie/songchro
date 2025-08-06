@@ -1,8 +1,8 @@
 import glob
 import json
 import os
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, List
 
 import structlog
 
@@ -30,7 +30,7 @@ class FileLibrary(model.Library):
     def __init__(self, playlist_root: str, music_root: str):
         playlists = {}
         tracks = set()
-        playlist_folders: List[PlaylistFolder] = []
+        playlist_folders: list[PlaylistFolder] = []
         for filename in glob.glob(f"{playlist_root}/*.json"):
             with open(filename, "r") as f:
                 to_import = json.load(f)
@@ -71,7 +71,7 @@ class FileLibrary(model.Library):
 
     def map_tracks(
         self, tracks: Iterable[Track], /, dry_run: bool = False
-    ) -> List[Track]:
+    ) -> list[Track]:
         return [Track(**track.json_data()) for track in tracks]
 
     def create_playlist(

@@ -1,9 +1,10 @@
 import itertools
 import json
 import unicodedata
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Iterable, Dict, Any
+from typing import Any
 
 import structlog
 
@@ -22,7 +23,7 @@ class Track:
     track_number: int | None = None
     filepath: Path | str | None = None
 
-    def json_data(self) -> Dict[str, Any]:
+    def json_data(self) -> dict[str, Any]:
         data = {
             "name": self.name,
             "artist": self.artist,
@@ -52,12 +53,12 @@ class Track:
 class Playlist:
     """Represent a playlist."""
 
-    def __init__(self, name: str, library: "Library", /, tracks: List[Track] = None):
+    def __init__(self, name: str, library: "Library", /, tracks: list[Track] = None):
         self.name = name
-        self._tracks: List[Track] = tracks if tracks is not None else []
+        self._tracks: list[Track] = tracks if tracks is not None else []
         self.library = library
 
-    def json_data(self) -> Dict[str, Any]:
+    def json_data(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "tracks": [track.json_data() for track in self.tracks],
@@ -123,11 +124,11 @@ class Playlist:
 
 
 class PlaylistFolder(Playlist):
-    def __init__(self, name: str, sub_playlists: List[Playlist], library: "Library"):
+    def __init__(self, name: str, sub_playlists: list[Playlist], library: "Library"):
         super().__init__(name, library)
         self.sub_playlists = sub_playlists
 
-    def json_data(self) -> Dict[str, Any]:
+    def json_data(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "sub_playlists": [playlist.name for playlist in self.sub_playlists],
@@ -160,7 +161,7 @@ class SmartPlaylist(Playlist):
         super().__init__(name, library)
         self.smart_criteria = smart_criteria
 
-    def json_data(self) -> Dict[str, Any]:
+    def json_data(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "smart_criteria": self.smart_criteria,
@@ -183,8 +184,8 @@ class Library:
         self,
         source: str,
         music_root: Path,
-        tracks: List[Track] = None,
-        playlists: List[Playlist] = None,
+        tracks: list[Track] = None,
+        playlists: list[Playlist] = None,
     ):
         self.source = source
         self.music_root = music_root
@@ -199,10 +200,10 @@ class Library:
         return self._tracks
 
     @property
-    def playlists(self) -> List[Playlist]:
+    def playlists(self) -> list[Playlist]:
         return self._playlists
 
-    def json_data(self) -> Dict[str, Any]:
+    def json_data(self) -> dict[str, Any]:
         data = {
             "tracks": [track.json_data() for track in self.tracks],
             "playlists": [playlist.json_data() for playlist in self.playlists],
@@ -212,12 +213,12 @@ class Library:
     def to_json(self) -> str:
         return json.dumps(self.json_data(), indent=2)
 
-    def find_track(self, track: Track) -> List[Track]:
+    def find_track(self, track: Track) -> list[Track]:
         raise NotImplementedError()
 
     def map_tracks(
         self, tracks: Iterable[Track], /, dry_run: bool = False
-    ) -> List[Track]:
+    ) -> list[Track]:
         raise NotImplementedError()
 
     def create_playlist(

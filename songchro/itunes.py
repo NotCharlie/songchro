@@ -4,7 +4,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Dict, List
+from typing import Any
 from urllib.parse import urlparse, unquote
 
 from songchro.model import Library, Track, Playlist, SmartPlaylist, PlaylistFolder
@@ -12,7 +12,7 @@ from songchro.model import Library, Track, Playlist, SmartPlaylist, PlaylistFold
 
 @dataclass
 class ItunesTrack(Track):
-    itunes_track: dict = field(repr=False)
+    itunes_track: dict[str, Any] = field(repr=False)
 
     def key(self):
         return unicodedata.normalize("NFC", self.itunes_track["Track ID"])
@@ -30,8 +30,8 @@ class ItunesPlaylist(Playlist):
     def __init__(
         self,
         name: str,
-        tracks: List[ItunesTrack],
-        itunes_playlist: Dict,
+        tracks: list[ItunesTrack],
+        itunes_playlist: dict[str, Any],
         library: "ItunesLibrary",
     ):
         super().__init__(name, library, tracks=tracks)
@@ -43,7 +43,7 @@ class ItunesPlaylist(Playlist):
 
 class ItunesSmartPlaylist(SmartPlaylist):
     def __init__(
-        self, name: str, smart_criteria, itunes_playlist: Dict, library: "ItunesLibrary"
+        self, name: str, smart_criteria, itunes_playlist: dict, library: "ItunesLibrary"
     ):
         super().__init__(name, "TODO", library)
         self.itunes_playlist = itunes_playlist
@@ -54,8 +54,8 @@ class ItunesPlaylistFolder(PlaylistFolder):
     def __init__(
         self,
         name: str,
-        sub_playlists: List[ItunesPlaylist],
-        itunes_playlist: Dict,
+        sub_playlists: list[ItunesPlaylist],
+        itunes_playlist: dict[str, Any],
         library: "ItunesLibrary",
     ):
         super().__init__(name, sub_playlists, library)
@@ -66,14 +66,14 @@ class ItunesLibrary(Library):
     def __init__(
         self,
         music_root: Path,
-        itunes_library: Dict,
+        itunes_library: dict[str, Any],
     ):
         super().__init__("iTunes", music_root)
         self.itunes_library = itunes_library
 
     @cached_property
-    def track_for(self) -> Dict[str, ItunesTrack]:
-        result: Dict[str, ItunesTrack] = {}
+    def track_for(self) -> dict[str, ItunesTrack]:
+        result: dict[str, ItunesTrack] = {}
         for track in self.itunes_library["Tracks"].values():
             track_id = track["Track ID"]
             location = track.get("Location", None)
@@ -96,12 +96,12 @@ class ItunesLibrary(Library):
         return result
 
     @cached_property
-    def tracks(self) -> List[ItunesTrack]:
+    def tracks(self) -> list[ItunesTrack]:
         return list(self.track_for.values())
 
     @cached_property
-    def playlists(self) -> List[Playlist]:
-        result: Dict[
+    def playlists(self) -> list[Playlist]:
+        result: dict[
             str, ItunesPlaylist | ItunesSmartPlaylist | ItunesPlaylistFolder
         ] = {}
         for playlist in self.itunes_library["Playlists"]:

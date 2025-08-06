@@ -1,9 +1,10 @@
 import os.path
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import List, Set, Dict, Any, Iterable
+from typing import Any
 
 import structlog
 from plexapi import playlist, audio
@@ -39,7 +40,7 @@ class PlexPlaylist(model.Playlist):
         self.plex_playlist = plex_playlist
 
     @cached_property
-    def tracks(self) -> List[model.Track]:
+    def tracks(self) -> list[model.Track]:
         return [
             PlexTrack(
                 plex_track=track,
@@ -75,7 +76,7 @@ class PlexSmartPlaylist(model.SmartPlaylist):
         self.plex_playlist = plex_playlist
         self.plex_filters = plex_playlist.filters()
 
-    def json_data(self) -> Dict[str, Any]:
+    def json_data(self) -> dict[str, Any]:
         data = super().json_data()
         data["filters"] = self.plex_filters
         return data
@@ -87,7 +88,7 @@ class PlexLibrary(model.Library):
         self.music = music
 
     @cached_property
-    def tracks(self) -> List[model.Track]:
+    def tracks(self) -> list[model.Track]:
         return [
             PlexTrack(
                 plex_track=track,
@@ -103,7 +104,7 @@ class PlexLibrary(model.Library):
         ]
 
     @cached_property
-    def playlists(self) -> List[model.Playlist]:
+    def playlists(self) -> list[model.Playlist]:
         result = []
         for pl in self.music.playlists():
             if pl.smart:
@@ -113,7 +114,7 @@ class PlexLibrary(model.Library):
         return result
 
     @staticmethod
-    def _perform_replacements(input: str) -> Set[str]:
+    def _perform_replacements(input: str) -> set[str]:
         if not input:
             return set()
         result = {input}
@@ -186,7 +187,7 @@ class PlexLibrary(model.Library):
                         queue.append(new_element)
 
     @staticmethod
-    def _make_filter(elements: Dict[str, Iterable[str]]) -> Dict[str, Any]:
+    def _make_filter(elements: dict[str, Iterable[str]]) -> dict[str, Any]:
         return {
             "and": [
                 {"or": [{key: element} for element in values if element]}
@@ -194,7 +195,7 @@ class PlexLibrary(model.Library):
             ]
         }
 
-    def _find_tightest_match(self, to_find: model.Track) -> List[audio.Track]:
+    def _find_tightest_match(self, to_find: model.Track) -> list[audio.Track]:
         tightest_match = []
         log.debug("start _find_tightest_match", to_find=to_find)
         for title in self._strip_regexes(to_find.name):
@@ -278,7 +279,7 @@ class PlexLibrary(model.Library):
                             tightest_match = tracks
         return tightest_match
 
-    def find_track(self, to_find: model.Track) -> List[model.Track]:
+    def find_track(self, to_find: model.Track) -> list[model.Track]:
         return [
             PlexTrack(
                 plex_track=track,
@@ -297,7 +298,7 @@ class PlexLibrary(model.Library):
 
     def map_tracks(
         self, tracks: Iterable[model.Track], /, dry_run: bool = False
-    ) -> List[PlexTrack]:
+    ) -> list[PlexTrack]:
         errors = []
         result = []
         for track in tracks:
