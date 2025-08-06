@@ -110,8 +110,11 @@ class Playlist:
                 break
 
     def _add_item(self, track: Track, after):
-        idx = self._tracks.index(after)
-        self._tracks.insert(idx + 1, track)
+        if after:
+            idx = self._tracks.index(after)
+            self._tracks.insert(idx + 1, track)
+        else:
+            self._tracks.append(track)
 
     def __str__(self):
         return (
@@ -178,10 +181,12 @@ class Library:
 
     def __init__(
         self,
+        source: str,
         music_root: Path,
         tracks: List[Track] = None,
         playlists: List[Playlist] = None,
     ):
+        self.source = source
         self.music_root = music_root
         self._tracks = tracks if tracks else []
         self._playlists = playlists if playlists else []
@@ -216,7 +221,7 @@ class Library:
         raise NotImplementedError()
 
     def create_playlist(
-        self, playlist_name: str, tracks: List[Track], dry_run=False
+        self, playlist_name: str, tracks: Iterable[Track], dry_run=False
     ) -> None:
         raise NotImplementedError()
 

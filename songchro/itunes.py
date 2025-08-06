@@ -68,7 +68,7 @@ class ItunesLibrary(Library):
         music_root: Path,
         itunes_library: Dict,
     ):
-        super().__init__(music_root)
+        super().__init__("iTunes", music_root)
         self.itunes_library = itunes_library
 
     @cached_property
@@ -87,7 +87,7 @@ class ItunesLibrary(Library):
                 name=track["Name"],
                 artist=track.get("Artist", None),
                 album=track.get("Album", None),
-                album_artist=track.get("Album Artist", track.get("Artist", None)),
+                album_artist=track.get("Album Artist", None),
                 disc_number=track.get("Disc Number", 1),
                 track_number=track.get("Track Number", None),
                 filepath=filepath,

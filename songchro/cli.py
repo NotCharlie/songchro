@@ -11,10 +11,10 @@ from typing import Dict
 import click
 import structlog
 
+import songchro.file_library as fl
 import songchro.itunes as it
 import songchro.plex as pl
-from songchro import __version__
-from songchro import file_library
+from songchro import __version__, commands
 from songchro import model
 
 
@@ -49,7 +49,7 @@ def cli(ctx, debug: bool, info: bool, file_root: str, file_music_root: str):
         structlog.configure(
             wrapper_class=structlog.make_filtering_bound_logger(logging.WARNING)
         )
-    ctx.obj["file_library"] = file_library.load_library(file_root, file_music_root)
+    ctx.obj["file_library"] = fl.load_library(file_root, file_music_root)
 
 
 @cli.group()
@@ -61,16 +61,10 @@ def file(ctx):
 @file.command("list")
 @click.pass_context
 @click.option("--songs", "-s", is_flag=True, help="Show all songs.")
-def file_list(ctx, songs: bool):
+@click.option("--simple", is_flag=True, help="Simple format, useful for pipelining.")
+def file_list(ctx, songs: bool, simple: bool):
     library = ctx.obj["file_library"]
-    click.echo("Listing local playlists:")
-    for playlist in (
-        p for p in library.playlists if not isinstance(p, model.SmartPlaylist)
-    ):
-        click.echo(f"  * {playlist.name}")
-        if songs:
-            for track in playlist.tracks:
-                click.echo(f"    - {track.name} / {track.artist} / {track.album}")
+    commands.list_playlists(library, songs, simple)
 
 
 @cli.group()
@@ -95,17 +89,11 @@ def itunes(ctx, xml: str, itunes_music_root: str):
 @itunes.command("list")
 @click.pass_context
 @click.option("--songs", "-s", is_flag=True, help="Show songs list.")
-def itunes_list(ctx, songs: bool):
+@click.option("--simple", is_flag=True, help="Simple format, useful for pipelining.")
+def itunes_list(ctx, songs: bool, simple: bool):
     """List available iTunes playlists."""
     library = ctx.obj["itunes_library"]
-    click.echo("Listing iTunes playlists:")
-    for playlist in (
-        p for p in library.playlists if not isinstance(p, model.SmartPlaylist)
-    ):
-        click.echo(f"  * {playlist.name}")
-        if songs:
-            for track in playlist.tracks:
-                click.echo(f"    - {track.name} / {track.artist} / {track.album}")
+    commands.list_playlists(library, songs, simple)
 
 
 @itunes.command("export")
@@ -114,26 +102,16 @@ def itunes_list(ctx, songs: bool):
 def itunes_export(ctx, playlist_name: str):
     """Export an iTunes playlist to the local library."""
     file_library = ctx.obj["file_library"]
-    click.echo(f"Exporting iTunes playlist: {playlist_name}")
     library = ctx.obj["itunes_library"]
-    playlist = library.find_playlist(playlist_name)
-    if playlist:
-        click.echo(f"Found playlist: {playlist.name}")
-        file_library.create_playlist(playlist.name, playlist.tracks)
-    else:
-        click.echo(f"No playlist: {playlist_name}")
+    commands.export_playlist(library, playlist_name, file_library)
 
 
 @itunes.command("export_all")
 @click.pass_context
 def itunes_export_all(ctx):
     file_library = ctx.obj["file_library"]
-    click.echo(f"Exporting all iTunes playlists: {file_library.playlist_root}")
     library = ctx.obj["itunes_library"]
-    for playlist in (
-        p for p in library.playlists if not isinstance(p, model.SmartPlaylist)
-    ):
-        file_library.create_playlist(playlist.name, playlist.tracks)
+    commands.export_all_playlists(library, file_library)
 
 
 @cli.group()
@@ -179,16 +157,12 @@ def plex(
 
 @plex.command("list")
 @click.option("--songs", "-s", is_flag=True, help="Show songs list.")
+@click.option("--simple", is_flag=True, help="Simple format, useful for pipelining.")
 @click.pass_context
-def plex_list(ctx, songs: bool):
+def plex_list(ctx, songs: bool, simple: bool):
     """List available Plex playlists."""
-    click.echo("Listing Plex playlists")
     library = ctx.obj["plex_library"]
-    for playlist in library.playlists:
-        click.echo(f"  * {playlist.name}")
-        if songs:
-            for track in playlist.tracks:
-                click.echo(f"    - {track.name} / {track.artist} / {track.album}")
+    commands.list_playlists(library, songs, simple)
 
 
 @plex.command("export")
@@ -197,26 +171,16 @@ def plex_list(ctx, songs: bool):
 def plex_export(ctx, playlist_name: str):
     """Export a Plex playlist to the local library."""
     file_library = ctx.obj["file_library"]
-    click.echo(f"Exporting Plex playlist: {playlist_name}")
     library = ctx.obj["plex_library"]
-    playlist = library.find_playlist(playlist_name)
-    if playlist:
-        click.echo(f"Found playlist: {playlist.name}")
-        file_library.create_playlist(playlist.name, playlist.tracks)
-    else:
-        click.echo(f"No playlist: {playlist_name}")
+    commands.export_playlist(library, playlist_name, file_library)
 
 
 @plex.command("export_all")
 @click.pass_context
 def plex_export_all(ctx):
     file_library = ctx.obj["file_library"]
-    click.echo(f"Exporting all Plex playlists: {file_library.playlist_root}")
     plex_library = ctx.obj["plex_library"]
-    for playlist in (
-        p for p in plex_library.playlists if not isinstance(p, model.SmartPlaylist)
-    ):
-        file_library.create_playlist(playlist.name, playlist.tracks)
+    commands.export_all_playlists(plex_library, file_library)
 
 
 @plex.command("find")
@@ -267,16 +231,8 @@ def plex_find(
 def plex_import(ctx, playlist: str, dry_run: bool):
     """Import a playlist to Plex."""
     library = ctx.obj["plex_library"]
-    click.echo(f"Importing playlist to Plex: from {playlist}")
     file_library = ctx.obj["file_library"]
-    tracks = list(file_library.find_playlist(playlist).tracks)
-    click.echo(f"Found playlist: {playlist} {len(tracks)} tracks")
-    library.create_playlist(playlist, tracks, dry_run=dry_run)
-    if not dry_run:
-        new_playlist = library.find_playlist(playlist)
-        click.echo(f"Created new playlist: {new_playlist.name}")
-    else:
-        click.echo(f"No new playlist: {playlist}")
+    commands.import_playlist(file_library, playlist, library, dry_run=dry_run)
 
 
 @cli.command()

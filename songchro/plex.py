@@ -83,7 +83,7 @@ class PlexSmartPlaylist(model.SmartPlaylist):
 
 class PlexLibrary(model.Library):
     def __init__(self, music_root: Path, music: MusicSection):
-        super().__init__(music_root)
+        super().__init__("Plex", music_root)
         self.music = music
 
     @cached_property
@@ -318,7 +318,7 @@ class PlexLibrary(model.Library):
         return result
 
     def create_playlist(
-        self, playlist_name: str, tracks: List[model.Track], dry_run=False
+        self, playlist_name: str, tracks: Iterable[model.Track], dry_run=False
     ) -> None:
         if not dry_run:
             try:

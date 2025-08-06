@@ -23,6 +23,7 @@ class FilePlaylist(Playlist):
         if not dry_run:
             with open(self.filename, "w", encoding="utf-8") as f:
                 f.write(self.to_json())
+                f.write("\n")
 
 
 class FileLibrary(model.Library):
@@ -61,7 +62,10 @@ class FileLibrary(model.Library):
                 playlists[playlist.name] for playlist in playlist_folder.sub_playlists
             ]
         super().__init__(
-            Path(music_root), tracks=list(tracks), playlists=list(playlists.values())
+            "File",
+            Path(music_root),
+            tracks=list(tracks),
+            playlists=list(playlists.values()),
         )
         self.playlist_root = playlist_root
 
@@ -71,7 +75,7 @@ class FileLibrary(model.Library):
         return [Track(**track.json_data()) for track in tracks]
 
     def create_playlist(
-        self, playlist_name: str, tracks: List[Track], dry_run=False
+        self, playlist_name: str, tracks: Iterable[Track], dry_run=False
     ) -> None:
         new_tracks = self.map_tracks(tracks, dry_run=dry_run)
         filename = os.path.join(self.playlist_root, f"{playlist_name}.json")
@@ -80,6 +84,7 @@ class FileLibrary(model.Library):
         )
         with open(filename, "w", encoding="utf-8") as f:
             f.write(new_playlist.to_json())
+            f.write("\n")
 
 
 def load_library(playlist_root: str, music_root: str) -> FileLibrary:
