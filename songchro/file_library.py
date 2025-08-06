@@ -1,5 +1,6 @@
 import glob
 import json
+import os
 from pathlib import Path
 from typing import Iterable, List
 
@@ -62,11 +63,23 @@ class FileLibrary(model.Library):
         super().__init__(
             Path(music_root), tracks=list(tracks), playlists=list(playlists.values())
         )
+        self.playlist_root = playlist_root
 
     def map_tracks(
         self, tracks: Iterable[Track], /, dry_run: bool = False
     ) -> List[Track]:
         return [Track(**track.json_data()) for track in tracks]
+
+    def create_playlist(
+        self, playlist_name: str, tracks: List[Track], dry_run=False
+    ) -> None:
+        new_tracks = self.map_tracks(tracks, dry_run=dry_run)
+        filename = os.path.join(self.playlist_root, f"{playlist_name}.json")
+        new_playlist = FilePlaylist(
+            playlist_name, Path(filename), self, tracks=new_tracks
+        )
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(new_playlist.to_json())
 
 
 def load_library(playlist_root: str, music_root: str) -> FileLibrary:

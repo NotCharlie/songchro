@@ -23,13 +23,18 @@ from songchro import model
 @click.option("--debug", is_flag=True)
 @click.option("--info", is_flag=True)
 @click.option(
-    "--music_root",
-    type=click.Path(),
-    default=None,
-    help="Path to Music root.  Will be stripped in resulting playlist files.",
+    "--file-music-root",
+    type=click.Path(exists=True, file_okay=False, dir_okay=True),
+    default=".",
+    help="Root directory for local media files.  Will be stripped in resulting playlist files.",
+)
+@click.option(
+    "--file-root",
+    type=click.Path(exists=True, file_okay=False, dir_okay=True),
+    help="Root directory for local playlist files.",
 )
 @click.pass_context
-def cli(ctx, debug: bool, info: bool, music_root: str):
+def cli(ctx, debug: bool, info: bool, file_root: str, file_music_root: str):
     """Synchronize playlists between iTunes and Plex."""
     ctx.ensure_object(dict)
     if debug:
@@ -44,26 +49,20 @@ def cli(ctx, debug: bool, info: bool, music_root: str):
         structlog.configure(
             wrapper_class=structlog.make_filtering_bound_logger(logging.WARNING)
         )
-    ctx.obj["music_root"] = music_root if music_root else "/"
+    ctx.obj["file_library"] = file_library.load_library(file_root, file_music_root)
 
 
 @cli.group()
 @click.pass_context
-@click.option(
-    "--local-root",
-    type=click.Path(exists=True),
-    help="Root directory for local playlist files.",
-)
-def local(ctx, local_root: str):
-    music_root = ctx.obj["music_root"]
-    ctx.obj["local_library"] = file_library.load_library(local_root, music_root)
+def file(ctx):
+    pass
 
 
-@local.command("list")
+@file.command("list")
 @click.pass_context
 @click.option("--songs", "-s", is_flag=True, help="Show all songs.")
-def local_list(ctx, songs: bool):
-    library = ctx.obj["local_library"]
+def file_list(ctx, songs: bool):
+    library = ctx.obj["file_library"]
     click.echo("Listing local playlists:")
     for playlist in (
         p for p in library.playlists if not isinstance(p, model.SmartPlaylist)
@@ -83,10 +82,14 @@ def local_list(ctx, songs: bool):
     type=click.Path(exists=True),
     help="Path to iTunes Library xml file.",
 )
-def itunes(ctx, xml: str):
+@click.option(
+    "--itunes-music-root",
+    type=click.Path(),
+    help="Root directory for iTunes media files.",
+)
+def itunes(ctx, xml: str, itunes_music_root: str):
     """Commands for working with iTunes playlists."""
-    music_root = ctx.obj["music_root"]
-    ctx.obj["itunes_library"] = it.load_library(xml, music_root)
+    ctx.obj["itunes_library"] = it.load_library(xml, itunes_music_root)
 
 
 @itunes.command("list")
@@ -107,40 +110,30 @@ def itunes_list(ctx, songs: bool):
 
 @itunes.command("export")
 @click.argument("playlist_name")
-@click.option(
-    "--output",
-    "-o",
-    type=click.Path(),
-    help="Output file path. Default <playlist_name>.json",
-)
 @click.pass_context
-def itunes_export(ctx, playlist_name: str, output: str):
-    """Export an iTunes playlist."""
+def itunes_export(ctx, playlist_name: str):
+    """Export an iTunes playlist to the local library."""
+    file_library = ctx.obj["file_library"]
     click.echo(f"Exporting iTunes playlist: {playlist_name}")
-    if not output:
-        output = playlist_name + ".json"
-    click.echo(f"Output file: {output}")
     library = ctx.obj["itunes_library"]
     playlist = library.find_playlist(playlist_name)
     if playlist:
         click.echo(f"Found playlist: {playlist.name}")
-        with open(output, "w") as f:
-            f.write(playlist.to_json())
+        file_library.create_playlist(playlist.name, playlist.tracks)
     else:
         click.echo(f"No playlist: {playlist_name}")
 
 
 @itunes.command("export_all")
-@click.argument("output_dir", type=click.Path())
 @click.pass_context
-def itunes_export_all(ctx, output_dir: str):
-    click.echo(f"Exporting all iTunes playlists: {output_dir}")
-    os.makedirs(output_dir, exist_ok=True)
+def itunes_export_all(ctx):
+    file_library = ctx.obj["file_library"]
+    click.echo(f"Exporting all iTunes playlists: {file_library.playlist_root}")
     library = ctx.obj["itunes_library"]
-    for playlist in library.playlists:
-        with open(os.path.join(output_dir, f"{playlist.name}.json"), "w") as f:
-            click.echo(f"Exporting playlist: {playlist.name}")
-            f.write(playlist.to_json())
+    for playlist in (
+        p for p in library.playlists if not isinstance(p, model.SmartPlaylist)
+    ):
+        file_library.create_playlist(playlist.name, playlist.tracks)
 
 
 @cli.group()
@@ -158,6 +151,7 @@ def itunes_export_all(ctx, output_dir: str):
 @click.option(
     "--section", type=str, help="Plex section name for Music library.", default="Music"
 )
+@click.option("--plex-music-root", type=click.Path(), help="Plex music root path.")
 @click.pass_context
 def plex(
     ctx,
@@ -168,19 +162,19 @@ def plex(
     baseurl: str,
     token: str,
     section: str,
+    plex_music_root,
 ):
     """Commands for working with Plex playlists."""
-    music_root = ctx.obj["music_root"]
     if username and password and server:
         ctx.obj["plex_library"] = pl.load_library_by_username(
-            username, password, code, server, music_root, section=section
+            username, password, code, server, plex_music_root, section=section
         )
     elif baseurl and token:
         ctx.obj["plex_library"] = pl.load_library_by_baseurl(
-            baseurl, token, music_root, section=section
+            baseurl, token, plex_music_root, section=section
         )
     else:
-        ctx.obj["plex_library"] = pl.load_library(music_root, section=section)
+        ctx.obj["plex_library"] = pl.load_library(plex_music_root, section=section)
 
 
 @plex.command("list")
@@ -199,40 +193,30 @@ def plex_list(ctx, songs: bool):
 
 @plex.command("export")
 @click.argument("playlist_name")
-@click.option(
-    "--output",
-    "-o",
-    type=click.Path(),
-    help="Output file path. Default <playlist_name>.json",
-)
 @click.pass_context
-def plex_export(ctx, playlist_name: str, output: str):
-    """Export a Plex playlist."""
+def plex_export(ctx, playlist_name: str):
+    """Export a Plex playlist to the local library."""
+    file_library = ctx.obj["file_library"]
     click.echo(f"Exporting Plex playlist: {playlist_name}")
-    if not output:
-        output = playlist_name + ".json"
-    click.echo(f"Output file: {output}")
     library = ctx.obj["plex_library"]
     playlist = library.find_playlist(playlist_name)
     if playlist:
         click.echo(f"Found playlist: {playlist.name}")
-        with open(output, "w") as f:
-            f.write(playlist.to_json())
+        file_library.create_playlist(playlist.name, playlist.tracks)
     else:
         click.echo(f"No playlist: {playlist_name}")
 
 
 @plex.command("export_all")
-@click.argument("output_dir", type=click.Path())
 @click.pass_context
-def plex_export_all(ctx, output_dir: str):
-    click.echo(f"Exporting all Plex playlists: {output_dir}")
-    os.makedirs(output_dir, exist_ok=True)
-    library = ctx.obj["plex_library"]
-    for playlist in library.playlists:
-        with open(os.path.join(output_dir, f"{playlist.name}.json"), "w") as f:
-            click.echo(f"Exporting playlist: {playlist.name}")
-            f.write(playlist.to_json())
+def plex_export_all(ctx):
+    file_library = ctx.obj["file_library"]
+    click.echo(f"Exporting all Plex playlists: {file_library.playlist_root}")
+    plex_library = ctx.obj["plex_library"]
+    for playlist in (
+        p for p in plex_library.playlists if not isinstance(p, model.SmartPlaylist)
+    ):
+        file_library.create_playlist(playlist.name, playlist.tracks)
 
 
 @plex.command("find")
@@ -277,49 +261,37 @@ def plex_find(
 
 
 @plex.command("import")
-@click.argument("input_file", type=click.Path(exists=True))
+@click.argument("playlist", type=str)
 @click.option("--dry-run", "-d", is_flag=True, help="Dry run.")
 @click.pass_context
-def plex_import(ctx, input_file: str, dry_run: bool):
+def plex_import(ctx, playlist: str, dry_run: bool):
     """Import a playlist to Plex."""
     library = ctx.obj["plex_library"]
-    click.echo(f"Importing playlist to Plex: from {input_file}")
-    with open(input_file, "r") as f:
-        to_import = json.load(f)
-        playlist_name = to_import["name"]
-        tracks = [model.Track(**track) for track in to_import.get("tracks", [])]
-    click.echo(f"Found playlist: {playlist_name} {len(tracks)} tracks")
-    library.create_playlist(playlist_name, tracks, dry_run=dry_run)
+    click.echo(f"Importing playlist to Plex: from {playlist}")
+    file_library = ctx.obj["file_library"]
+    tracks = list(file_library.find_playlist(playlist).tracks)
+    click.echo(f"Found playlist: {playlist} {len(tracks)} tracks")
+    library.create_playlist(playlist, tracks, dry_run=dry_run)
     if not dry_run:
-        new_playlist = library.find_playlist(playlist_name)
+        new_playlist = library.find_playlist(playlist)
         click.echo(f"Created new playlist: {new_playlist.name}")
     else:
-        click.echo(f"No new playlist: {playlist_name}")
+        click.echo(f"No new playlist: {playlist}")
 
 
 @cli.command()
 @click.argument("playlist")
 @click.option(
     "--source-type",
-    type=click.Choice(["itunes", "plex", "local"]),
-    default="local",
-    help="Source playlist type (default: local)",
-)
-@click.option(
-    "--itunes-music-root",
-    type=click.Path(),
-    help="Root directory for iTunes media files.",
+    type=click.Choice(["itunes", "plex", "file"]),
+    default="file",
+    help="Source playlist type (default: file)",
 )
 @click.option(
     "--destination-type",
-    type=click.Choice(["itunes", "plex", "local"]),
+    type=click.Choice(["itunes", "plex", "file"]),
     default="plex",
     help="Destination playlist type (default: plex)",
-)
-@click.option(
-    "--plex-music-root",
-    type=click.Path(),
-    help="Root directory for Plex media files.",
 )
 @click.option(
     "--xml",
@@ -328,25 +300,25 @@ def plex_import(ctx, input_file: str, dry_run: bool):
     help="Path to iTunes Library xml file.  Required if source-type or destination-type is itunes.",
 )
 @click.option(
-    "--local-root",
-    type=click.Path(exists=True),
-    help="Root directory for local playlist files.",
+    "--itunes-music-root",
+    type=click.Path(),
+    help="Root directory for iTunes media files.",
 )
 @click.option(
-    "--local-music-root",
+    "--plex-music-root",
     type=click.Path(),
-    help="Root directory for local media files.",
+    help="Root directory for Plex media files.",
 )
 @click.option("--dry-run", "-d", is_flag=True, help="Dry run.")
+@click.pass_context
 def sync(
+    ctx,
     playlist: str,
     source_type: str,
-    itunes_music_root: str,
     destination_type: str,
-    plex_music_root: str,
     xml: str,
-    local_root: str,
-    local_music_root: str,
+    itunes_music_root: str,
+    plex_music_root: str,
     dry_run: bool,
 ):
     """Synchronize playlists between platforms."""
@@ -361,9 +333,9 @@ def sync(
     if source_type == "plex" or destination_type == "plex":
         plex_library = pl.load_library(plex_music_root)
         libs["plex"] = plex_library
-    if source_type == "local" or destination_type == "local":
-        local_library = file_library.load_library(local_root, local_music_root)
-        libs["local"] = local_library
+    if source_type == "file" or destination_type == "file":
+        file_library = ctx.obj["file_library"]
+        libs["file"] = file_library
 
     src = libs[source_type].find_playlist(playlist)
     dest = libs[destination_type].find_playlist(playlist)
