@@ -57,7 +57,7 @@ class PlexPlaylist(model.Playlist):
             for track in self.plex_playlist.items()
         ]
 
-    def _add_item(self, track: model.Track, after):
+    def _add_item(self, track: model.Track, after: model.Track):
         if isinstance(track, PlexTrack) and (
             isinstance(after, PlexTrack) or after is None
         ):
@@ -114,18 +114,18 @@ class PlexLibrary(model.Library):
         return result
 
     @staticmethod
-    def _perform_replacements(input: str) -> set[str]:
-        if not input:
+    def _perform_replacements(data: str) -> set[str]:
+        if not data:
             return set()
-        result = {input}
+        result = {data}
         processed = set()
-        queue = [input]
+        queue = [data]
 
         subs = {
-            "-": "‐",
-            "‐": "–",
+            "-": "\u2010",
+            "\u2010": "\u2013",
             "''": '"',
-            "'": "’",
+            "'": "\u2019",
             "`": "'",
             '"': "",
             " / ": "/",
@@ -140,7 +140,7 @@ class PlexLibrary(model.Library):
             " With ": " with ",
             " In ": " in ",
             "?": "",
-            "...": "…",
+            "...": "\u2026",
             ".": "",
             ",": "",
             " No.": " no.",
@@ -158,13 +158,16 @@ class PlexLibrary(model.Library):
         return result
 
     @staticmethod
-    def _strip_regexes(input: str):
-        if not input:
+    def _strip_regexes(data: str):
+        if not data:
             yield ""
             return
         processed = set()
-        queue = [input]
+        queue = [data]
         regexes = [
+            (re.compile(r"\((.*?)\)$"), r"\g<1>"),
+            (re.compile(r"\[(.*?)]$"), r"(\g<1>)"),
+            (re.compile(r'"(.*?)"'), r"\\u201c\g<1>\\u201d"),
             (re.compile(r" \(.*?\)$"), ""),
             (re.compile(r" \[.*?]$"), ""),
             (re.compile(r" - .*?$"), ""),
@@ -173,7 +176,6 @@ class PlexLibrary(model.Library):
             (re.compile(r" OST$"), ""),
             (re.compile(r"^.*?: "), ""),
             (re.compile(r"^\(.*?\) "), ""),
-            (re.compile(r"\((.*?)\)$"), r"\g<1>"),
         ]
         while queue:
             element = queue.pop(0)
@@ -253,13 +255,24 @@ class PlexLibrary(model.Library):
                 for fields, fn in combos:
                     log.debug("performing query", fields=fields)
                     query = self._make_filter({key: subqueries[key] for key in fields})
-                    tracks = [
-                        track
-                        for track in self.music.searchTracks(filters=query)
-                        if track.parentIndex == to_find.disc_number
-                        or not to_find.disc_number
-                    ]
-                    log.debug("resulting tracks", tracks=tracks)
+                    log.debug("query", query=query)
+                    tracks = []
+                    try:
+                        tracks = [
+                            track
+                            for track in self.music.searchTracks(filters=query)
+                            if (
+                                track.parentIndex == to_find.disc_number
+                                or not to_find.disc_number
+                            )
+                            and (
+                                track.locations[0].endswith(to_find.filepath)
+                                or not to_find.filepath
+                            )
+                        ]
+                        log.debug("resulting tracks", tracks=tracks)
+                    except Exception as e:
+                        log.warning("exception during search()", fields=fields, e=e)
                     if fn:
                         tracks = list(filter(fn, tracks))
                     if tracks:
@@ -315,7 +328,7 @@ class PlexLibrary(model.Library):
         if errors:
             for index, error in enumerate(errors):
                 log.error(f"  {index+1}. {error}")
-            raise RuntimeError(f"Found {len(errors)} tracks for {tracks}")
+            raise RuntimeError(f"Found {len(errors)} errors")
         return result
 
     def create_playlist(

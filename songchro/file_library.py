@@ -18,12 +18,17 @@ class FilePlaylist(Playlist):
         self.filename = filename
 
     def sync_tracks(self, other: Playlist, /, dry_run=False):
-        super().sync_tracks(other, dry_run=dry_run)
-        log.info("syncing playlist to file", filename=self.filename, tracks=self.tracks)
-        if not dry_run:
-            with open(self.filename, "w", encoding="utf-8") as f:
-                f.write(self.to_json())
-                f.write("\n")
+        changed = super().sync_tracks(other, dry_run=dry_run)
+        if changed:
+            log.info(
+                "syncing updated playlist to file",
+                filename=self.filename,
+                tracks=self.tracks,
+            )
+            if not dry_run:
+                with open(self.filename, "w", encoding="utf-8") as f:
+                    f.write(self.to_json())
+                    f.write("\n")
 
 
 class FileLibrary(model.Library):

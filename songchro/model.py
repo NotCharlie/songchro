@@ -71,46 +71,56 @@ class Playlist:
     def tracks(self) -> Iterable[Track]:
         return self._tracks
 
-    def sync_tracks(self, other: "Playlist", /, dry_run=False):
-        my_tracks = {track.key(): track for track in self.tracks}
-        other_tracks = {
-            track.key(): track for track in self.library.map_tracks(other.tracks)
-        }
-        combined_tracks = other_tracks | my_tracks
-        log.info(f"combined tracks", count=len(combined_tracks))
-
-        my_iter = (track for track in my_tracks.values())
+    def sync_tracks(self, other: "Playlist", /, dry_run=False) -> bool:
+        changed = False
+        # assuming that each track is in a playlist only once
+        remaining_tracks = {t.key() for t in self.tracks}
+        my_iter = enumerate(self.tracks)
         add_after = None
-        my_next_track = next(my_iter, None)
-        combined_iter = enumerate(combined_tracks.values())
-        idx, combined_track = next(combined_iter, (-1, None))
-        while combined_track or my_next_track:
-            if combined_track == my_next_track:
-                log.debug(
-                    "tracks match",
-                    combined_track=combined_track,
-                    my_next_track=my_next_track,
-                )
+        my_idx, my_next_track = next(my_iter, (-1, None))
+        other_iter = enumerate(self.library.map_tracks(other.tracks))
+        other_idx, next_other = next(other_iter, (-1, None))
+        while next_other:
+            log.debug(
+                "checking next track",
+                other_idx=other_idx,
+                next_other=next_other,
+                my_idx=my_idx,
+                my_next_track=my_next_track,
+            )
+            if next_other == my_next_track:
                 add_after = my_next_track
-                my_next_track = next(my_iter, None)
-                idx, combined_track = next(combined_iter, (-1, None))
-            elif combined_track:
+                remaining_tracks.remove(my_next_track.key())
+                my_idx, my_next_track = next(my_iter, (-1, None))
+                other_idx, next_other = next(other_iter, (-1, None))
+            elif next_other.key() in remaining_tracks:
+                while next_other != my_next_track:
+                    log.debug(
+                        "looking for other",
+                        my_next_track=my_next_track,
+                        next_other=next_other,
+                    )
+                    remaining_tracks.remove(my_next_track.key())
+                    add_after = my_next_track
+                    my_idx, my_next_track = next(my_iter, (-1, None))
+                    assert my_next_track
+            else:
                 log.info(
                     f"inserting track",
-                    idx=idx,
-                    combined_track=combined_track,
+                    other_idx=other_idx,
+                    next_other=next_other,
+                    my_idx=my_idx,
                     add_after=add_after,
                     dry_run=dry_run,
                 )
+                changed = True
                 if not dry_run:
-                    self._add_item(combined_track, add_after)
-                add_after = combined_track
-                idx, combined_track = next(combined_iter, (-1, None))
-            else:
-                log.debug("reached end of combined_tracks")
-                break
+                    self._add_item(next_other, add_after)
+                add_after = next_other
+                other_idx, next_other = next(other_iter, (-1, None))
+        return changed
 
-    def _add_item(self, track: Track, after):
+    def _add_item(self, track: Track, after: Track):
         if after:
             idx = self._tracks.index(after)
             self._tracks.insert(idx + 1, track)
