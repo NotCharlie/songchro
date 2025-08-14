@@ -1,6 +1,0 @@
-click ~= 8.1.7
-plexapi ~= 4.17.0
-requests ~= 2.32.4
-spotipy ~= 2.25.1
-structlog ~= 25.4.0
-PyYAML ~=  6.0.2

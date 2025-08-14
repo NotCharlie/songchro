@@ -15,7 +15,8 @@ import yaml
 import songchro.file_library as fl
 import songchro.itunes as it
 import songchro.plex as pl
-from songchro import __version__, commands
+from songchro import __version__
+from songchro import commands
 from songchro import model
 from songchro.plex import PlexLibrary
 

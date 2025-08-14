@@ -6,8 +6,14 @@ from pathlib import Path
 
 import structlog
 
-from songchro import model
-from songchro.model import Playlist, Track, PlaylistFolder, SmartPlaylist, PlaylistName
+from songchro.model import (
+    Playlist,
+    Track,
+    PlaylistFolder,
+    SmartPlaylist,
+    PlaylistName,
+    Library,
+)
 
 log = structlog.get_logger()
 
@@ -31,7 +37,7 @@ class FilePlaylist(Playlist):
                     f.write("\n")
 
 
-class FileLibrary(model.Library):
+class FileLibrary(Library):
     def __init__(self, playlist_root: str, music_root: str):
         playlists = {}
         tracks = set()
@@ -55,7 +61,7 @@ class FileLibrary(model.Library):
                     )
                 else:
                     pl_tracks = [
-                        model.Track(**track) for track in to_import.get("tracks", [])
+                        Track(**track) for track in to_import.get("tracks", [])
                     ]
                     tracks.update(pl_tracks)
                     new_playlist = FilePlaylist(

@@ -1,0 +1,44 @@
+[project]
+name = "songchro"
+description = "Synchronize playlists between iTunes and Plex"
+authors = [
+    { name = "Adam Brown", email = "acourtneybrown@gmail.com" }
+]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.13,<4.0"
+dependencies = [
+    "click (>=8.2.1,<9.0.0)",
+    "plexapi (>=4.17.0,<5.0.0)",
+    "requests (>=2.32.4,<3.0.0)",
+    "spotipy (>=2.25.1,<3.0.0)",
+    "structlog (>=25.4.0,<26.0.0)",
+    "pyyaml (>=6.0.2,<7.0.0)"
+]
+packages = [
+    { include = "songchro", from = "src" },
+]
+dynamic = ["version"]
+
+[build-system]
+requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
+build-backend = "poetry_dynamic_versioning.backend"
+
+[tool.poetry]
+version = "0.0.0"
+
+[tool.poetry.scripts]
+songchro = "songchro.cli:cli"
+
+[tool.poetry.requires-plugins]
+poetry-dynamic-versioning = { version = ">=1.0.0,<2.0.0", extras = ["plugin"] }
+
+[tool.poetry-dynamic-versioning]
+enable = true
+vcs = "git"
+style = "pep440"
+pattern = '(?P<base>\d+\.\d+\.\d+)'
+dirty = true
+
+[tool.poetry-dynamic-versioning.substitution]
+files = ["src/songchro/__init__.py"]
