@@ -1,13 +1,19 @@
+from typing import Type
+
 import click
 
 from songchro import model
 
 
-def list_playlists(library: model.Library, songs: bool, simple: bool) -> None:
+def list_playlists(
+    library: model.Library, songs: bool, simple: bool, kind: Type[model.NamedPlaylist]
+) -> None:
     if not simple:
         click.echo(f"Listing {library.source} playlists:")
     for playlist in (
-        p for p in library.playlists if not isinstance(p, model.SmartPlaylist)
+        p
+        for p in sorted(library.playlists, key=lambda pl: pl.name)
+        if isinstance(p, kind)
     ):
         if simple:
             click.echo(playlist.name)

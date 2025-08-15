@@ -11,8 +11,8 @@ from songchro.model import (
     Track,
     PlaylistFolder,
     SmartPlaylist,
-    PlaylistName,
     Library,
+    NamedPlaylist,
 )
 
 log = structlog.get_logger()
@@ -49,7 +49,7 @@ class FileLibrary(Library):
                     new_playlist = PlaylistFolder(
                         to_import["name"],
                         [
-                            PlaylistName(name, self)
+                            NamedPlaylist(name, self)
                             for name in to_import["sub_playlists"]
                         ],
                         self,

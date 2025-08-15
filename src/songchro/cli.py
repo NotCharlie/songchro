@@ -21,6 +21,14 @@ from songchro import model
 from songchro.plex import PlexLibrary
 
 
+CLASS_FOR_KIND = {
+    "plain": model.Playlist,
+    "folder": model.PlaylistFolder,
+    "smart": model.SmartPlaylist,
+    "all": model.NamedPlaylist,
+}
+
+
 @click.group()
 @click.version_option(version=__version__)
 @click.option(
@@ -65,9 +73,20 @@ def file(ctx):
 @click.pass_context
 @click.option("--songs", "-s", is_flag=True, help="Show all songs.")
 @click.option("--simple", is_flag=True, help="Simple format, useful for pipelining.")
-def file_list(ctx, songs: bool, simple: bool):
+@click.option(
+    "--kind",
+    type=click.Choice(["plain", "folder", "smart", "all"]),
+    default="plain",
+    help="Kind of playlists to list.",
+)
+def file_list(
+    ctx,
+    songs: bool,
+    simple: bool,
+    kind: str,
+):
     library = ctx.obj["file_library"]
-    commands.list_playlists(library, songs, simple)
+    commands.list_playlists(library, songs, simple, CLASS_FOR_KIND[kind])
 
 
 @cli.group()
@@ -85,10 +104,21 @@ def itunes(ctx):
 @click.pass_context
 @click.option("--songs", "-s", is_flag=True, help="Show songs list.")
 @click.option("--simple", is_flag=True, help="Simple format, useful for pipelining.")
-def itunes_list(ctx, songs: bool, simple: bool):
+@click.option(
+    "--kind",
+    type=click.Choice(["plain", "folder", "smart", "all"]),
+    default="plain",
+    help="Kind of playlists to list.",
+)
+def itunes_list(ctx, songs: bool, simple: bool, kind: str):
     """List available iTunes playlists."""
     library = ctx.obj["itunes_library"]
-    commands.list_playlists(library, songs, simple)
+    commands.list_playlists(
+        library,
+        songs,
+        simple,
+        CLASS_FOR_KIND[kind],
+    )
 
 
 @itunes.command("export")
@@ -144,11 +174,17 @@ def plex(
 @plex.command("list")
 @click.option("--songs", "-s", is_flag=True, help="Show songs list.")
 @click.option("--simple", is_flag=True, help="Simple format, useful for pipelining.")
+@click.option(
+    "--kind",
+    type=click.Choice(["plain", "folder", "smart", "all"]),
+    default="plain",
+    help="Kind of playlists to list.",
+)
 @click.pass_context
-def plex_list(ctx, songs: bool, simple: bool):
+def plex_list(ctx, songs: bool, simple: bool, kind: str):
     """List available Plex playlists."""
     library = ctx.obj["plex_library"]
-    commands.list_playlists(library, songs, simple)
+    commands.list_playlists(library, songs, simple, CLASS_FOR_KIND[kind])
 
 
 @plex.command("export")

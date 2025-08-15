@@ -50,13 +50,27 @@ class Track:
         return NotImplemented
 
 
-class Playlist:
+class NamedPlaylist:
+    def __init__(self, name: str, library: "Library"):
+        self.name = name
+        self.library = library
+
+    @property
+    def tracks(self) -> Iterable[Track]:
+        raise NotImplementedError()
+
+    def sync_tracks(self, other: "NamedPlaylist", /, dry_run=False):
+        raise RuntimeError(
+            f"cannot directly sync tracks into {self.__class__.__name__}"
+        )
+
+
+class Playlist(NamedPlaylist):
     """Represent a playlist."""
 
     def __init__(self, name: str, library: "Library", /, tracks: list[Track] = None):
-        self.name = name
+        super().__init__(name, library)
         self._tracks: list[Track] = tracks if tracks is not None else []
-        self.library = library
 
     def json_data(self) -> dict[str, Any]:
         return {
@@ -133,8 +147,10 @@ class Playlist:
         )
 
 
-class PlaylistFolder(Playlist):
-    def __init__(self, name: str, sub_playlists: list[Playlist], library: "Library"):
+class PlaylistFolder(NamedPlaylist):
+    def __init__(
+        self, name: str, sub_playlists: list[NamedPlaylist], library: "Library"
+    ):
         super().__init__(name, library)
         self.sub_playlists = sub_playlists
 
@@ -150,23 +166,8 @@ class PlaylistFolder(Playlist):
             playlist.tracks for playlist in self.sub_playlists
         )
 
-    def sync_tracks(self, other: Playlist, /, dry_run=False):
-        raise RuntimeError(
-            f"cannot directly sync tracks into {self.__class__.__name__}"
-        )
 
-
-class PlaylistName(Playlist):
-    def __init__(self, name: str, library: "Library"):
-        super().__init__(name, library)
-
-    def sync_tracks(self, other: Playlist, /, dry_run=False):
-        raise RuntimeError(
-            f"cannot directly sync tracks into {self.__class__.__name__}"
-        )
-
-
-class SmartPlaylist(Playlist):
+class SmartPlaylist(NamedPlaylist):
     def __init__(self, name: str, smart_criteria, library: "Library"):
         super().__init__(name, library)
         self.smart_criteria = smart_criteria
@@ -176,15 +177,6 @@ class SmartPlaylist(Playlist):
             "name": self.name,
             "smart_criteria": self.smart_criteria,
         }
-
-    @property
-    def tracks(self) -> Iterable[Track]:
-        raise NotImplementedError()
-
-    def sync_tracks(self, other: Playlist, /, dry_run=False):
-        raise RuntimeError(
-            f"cannot directly sync tracks into {self.__class__.__name__}"
-        )
 
 
 class Library:
