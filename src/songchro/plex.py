@@ -1,12 +1,16 @@
+import base64
+import codecs
+import json
 import os.path
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import structlog
+from multimethod import multimethod
 from plexapi import playlist, audio
 from plexapi.exceptions import NotFound
 from plexapi.library import MusicSection
@@ -16,6 +20,27 @@ from plexapi.server import PlexServer
 from songchro import model
 
 log = structlog.get_logger()
+
+
+FOLDER_METADATA_HEADER = "### Songchro Folder metadata below, do NOT modify ###\n"
+
+
+class HasPlexPlaylist(Protocol):
+    plex_playlist: playlist.Playlist
+
+
+class AddsToPlexPlaylist:
+    def add_item(self: HasPlexPlaylist, track: model.Track, after: model.Track) -> None:
+        if isinstance(track, PlexTrack) and (
+            isinstance(after, PlexTrack) or after is None
+        ):
+            self.plex_playlist.addItems([track.plex_track])
+            self.plex_playlist.reload()  # TODO: figure out why @cached_data_property on _items not forcing reload
+            self.plex_playlist.moveItem(
+                track.plex_track, after.plex_track if after else None
+            )
+        else:
+            raise RuntimeError(f"incorrect track type: {type(track)} or {type(after)}")
 
 
 @dataclass
@@ -34,7 +59,7 @@ class PlexTrack(model.Track):
         return NotImplemented
 
 
-class PlexPlaylist(model.Playlist):
+class PlexPlaylist(model.Playlist, AddsToPlexPlaylist):
     def __init__(self, plex_playlist: playlist.Playlist, plex_lib: "PlexLibrary"):
         super().__init__(plex_playlist.title, plex_lib)
         self.plex_playlist = plex_playlist
@@ -57,17 +82,36 @@ class PlexPlaylist(model.Playlist):
             for track in self.plex_playlist.items()
         ]
 
-    def _add_item(self, track: model.Track, after: model.Track):
-        if isinstance(track, PlexTrack) and (
-            isinstance(after, PlexTrack) or after is None
-        ):
-            self.plex_playlist.addItems([track.plex_track])
-            self.plex_playlist.reload()  # TODO: figure out why @cached_data_property on _items not forcing reload
-            self.plex_playlist.moveItem(
-                track.plex_track, after.plex_track if after else None
+
+class PlexPlaylistFolder(model.PlaylistFolder, AddsToPlexPlaylist, model.TracksSyncer):
+    def __init__(
+        self,
+        plex_playlist: playlist.Playlist,
+        sub_playlists: list[model.NamedPlaylist],
+        library: "PlexLibrary",
+    ):
+        super().__init__(plex_playlist.title, sub_playlists, library)
+        self.plex_playlist = plex_playlist
+
+    @multimethod
+    def sync_tracks(self, other: model.Playlist, /, dry_run=False) -> bool:
+        return super().sync_tracks(other, dry_run=dry_run)
+
+    @multimethod
+    def sync_tracks(self, other: model.PlaylistFolder, /, dry_run=False) -> bool:
+        orig_tracks = self.tracks
+        changed = super().sync_tracks(other, dry_run=dry_run)
+        if changed or orig_tracks != self.tracks:
+            changed |= self.sync(
+                orig_tracks, other.tracks, self.library.map_tracks, dry_run=dry_run
             )
-        else:
-            raise RuntimeError(f"incorrect track type: {type(track)} or {type(after)}")
+        if changed:
+            self.update_summary()
+        return changed
+
+    def update_summary(self):
+        summary = f"{FOLDER_METADATA_HEADER}{codecs.decode(base64.encodebytes(codecs.encode(self.to_json())))}\n"
+        self.plex_playlist.editSummary(summary)
 
 
 class PlexSmartPlaylist(model.SmartPlaylist):
@@ -104,14 +148,31 @@ class PlexLibrary(model.Library):
         ]
 
     @cached_property
-    def playlists(self) -> list[model.Playlist]:
-        result = []
+    def playlists(self) -> list[model.NamedPlaylist]:
+        result: dict[str, model.NamedPlaylist] = {}
+        folders: list[PlexPlaylistFolder] = []
         for pl in self.music.playlists():
+            summary = pl.summary.replace("\r\n", "\n")
             if pl.smart:
-                result.append(PlexSmartPlaylist(pl, self))
+                result[pl.title] = PlexSmartPlaylist(pl, self)
+            elif FOLDER_METADATA_HEADER in summary:
+                # Decode the base64-encoded metadata following the header.
+                _, b64_data = summary.split(FOLDER_METADATA_HEADER, 1)
+                decoded_bytes = base64.decodebytes(codecs.encode(b64_data))
+                # The decoded bytes represent the JSON of a playlist folder;
+                folder_json = json.loads(decoded_bytes)
+                named_subs = [
+                    model.NamedPlaylist(name, self)
+                    for name in folder_json["sub_playlists"]
+                ]
+                new_playlist = PlexPlaylistFolder(pl, named_subs, self)
+                folders.append(new_playlist)
+                result[pl.title] = new_playlist
             else:
-                result.append(PlexPlaylist(pl, self))
-        return result
+                result[pl.title] = PlexPlaylist(pl, self)
+        for folder in folders:
+            folder.sub_playlists = [result[sub.name] for sub in folder.sub_playlists]
+        return list(result.values())
 
     @staticmethod
     def _perform_replacements(data: str) -> set[str]:
@@ -332,7 +393,10 @@ class PlexLibrary(model.Library):
         return result
 
     def create_playlist(
-        self, playlist_name: str, tracks: Iterable[model.Track], dry_run=False
+        self,
+        playlist_name: str,
+        source: model.NamedPlaylist,
+        dry_run=False,
     ) -> None:
         if not dry_run:
             try:
@@ -341,13 +405,30 @@ class PlexLibrary(model.Library):
                 raise RuntimeError(f"existing playlist {playlist_name}")
             except NotFound:
                 pass  # expected case
-        plex_tracks = self.map_tracks(tracks, dry_run=dry_run)
+        plex_tracks = self.map_tracks(source.tracks, dry_run=dry_run)
         if not dry_run:
-            new_playlist = self.music.createPlaylist(
-                playlist_name, [tr.plex_track for tr in plex_tracks]
-            )
+            new_playlist = self._make_playlist(source, playlist_name, plex_tracks)
             if "playlists" in self.__dict__:
-                self.playlists.append(PlexPlaylist(new_playlist, self))
+                self.playlists.append(new_playlist)
+
+    @multimethod
+    def _make_playlist(
+        self, _: model.Playlist, name: str, tracks: list[PlexTrack]
+    ) -> PlexPlaylist:
+        return self.music.createPlaylist(name, [tr.plex_track for tr in tracks])
+
+    @multimethod
+    def _make_playlist(
+        self,
+        source: model.PlaylistFolder,
+        name: str,
+        tracks: list[PlexTrack],
+    ) -> PlexPlaylistFolder:
+        new_playlist = self.music.createPlaylist(name, [tr.plex_track for tr in tracks])
+        subs = [self.find_playlist(p.name) for p in source.sub_playlists]
+        result = PlexPlaylistFolder(new_playlist, subs, self)
+        result.update_summary()
+        return result
 
 
 def load_library_by_username(

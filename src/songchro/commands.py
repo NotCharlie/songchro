@@ -29,7 +29,7 @@ def export_playlist(source: model.Library, name: str, target: model.Library) -> 
     playlist = source.find_playlist(name)
     if playlist:
         click.echo(f"Found {source.source} playlist: {name}")
-        target.create_playlist(name, playlist.tracks)
+        target.create_playlist(name, playlist)
     else:
         click.echo(f"No {source.source} playlist: {name}")
 
@@ -39,7 +39,7 @@ def export_all_playlists(source: model.Library, target: model.Library) -> None:
     for playlist in (
         p for p in source.playlists if not isinstance(p, model.SmartPlaylist)
     ):
-        target.create_playlist(playlist.name, playlist.tracks)
+        target.create_playlist(playlist.name, playlist)
 
 
 def import_playlist(
@@ -49,7 +49,7 @@ def import_playlist(
     playlist = source.find_playlist(name)
     if playlist:
         click.echo(f"Found {source.source} playlist: {name}")
-        target.create_playlist(name, playlist.tracks, dry_run=dry_run)
+        target.create_playlist(name, playlist, dry_run=dry_run)
         if not dry_run:
             new_playlist = target.find_playlist(name)
             click.echo(f"Created new {target.source} playlist: {new_playlist.name}")

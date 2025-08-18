@@ -1,14 +1,87 @@
 import itertools
 import json
 import unicodedata
-from collections.abc import Iterable
+from collections.abc import Iterable, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import structlog
+from multimethod import multimethod
 
 log = structlog.get_logger()
+
+
+class InvalidSyncError(Exception):
+    def __init__(self, target: type, source: type):
+        super().__init__(f"Cannot sync to {target.__name__} from {source.__name__}")
+        self.target = target
+        self.source = source
+
+
+class CanAddItem(Protocol):
+    def add_item(self, track: "Track", after: "Track") -> None:
+        raise NotImplementedError
+
+
+class TracksSyncer:
+    def sync(
+        self: CanAddItem,
+        my_tracks: Iterable["Track"],
+        other: Iterable["Track"],
+        mapper: Callable[[Iterable["Track"]], list["Track"]],
+        /,
+        dry_run=False,
+    ) -> bool:
+        changed = False
+        (my_iter_iter, remaining_tracks_iter) = itertools.tee(my_tracks)
+
+        # assuming that each track is in a playlist only once
+        remaining_tracks = {t.key() for t in remaining_tracks_iter}
+        my_iter = enumerate(my_iter_iter)
+        add_after = None
+        my_idx, my_next_track = next(my_iter, (-1, None))
+        other_iter = enumerate(mapper(other))
+        other_idx, next_other = next(other_iter, (-1, None))
+        while next_other:
+            log.debug(
+                "checking next track",
+                other_idx=other_idx,
+                next_other=next_other,
+                my_idx=my_idx,
+                my_next_track=my_next_track,
+            )
+            if next_other == my_next_track:
+                add_after = my_next_track
+                remaining_tracks.remove(my_next_track.key())
+                my_idx, my_next_track = next(my_iter, (-1, None))
+                other_idx, next_other = next(other_iter, (-1, None))
+            elif next_other.key() in remaining_tracks:
+                while next_other != my_next_track:
+                    log.debug(
+                        "looking for other",
+                        my_next_track=my_next_track,
+                        next_other=next_other,
+                    )
+                    remaining_tracks.remove(my_next_track.key())
+                    add_after = my_next_track
+                    my_idx, my_next_track = next(my_iter, (-1, None))
+                    assert my_next_track
+            else:
+                log.info(
+                    f"inserting track",
+                    other_idx=other_idx,
+                    next_other=next_other,
+                    my_idx=my_idx,
+                    add_after=add_after,
+                    dry_run=dry_run,
+                )
+                changed = True
+                if not dry_run:
+                    self.add_item(next_other, add_after)
+                add_after = next_other
+                other_idx, next_other = next(other_iter, (-1, None))
+        return changed
 
 
 @dataclass(kw_only=True)
@@ -57,15 +130,23 @@ class NamedPlaylist:
 
     @property
     def tracks(self) -> Iterable[Track]:
-        raise NotImplementedError()
-
-    def sync_tracks(self, other: "NamedPlaylist", /, dry_run=False):
-        raise RuntimeError(
-            f"cannot directly sync tracks into {self.__class__.__name__}"
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not contain tracks directly"
         )
 
+    def sync_tracks(self, other: "NamedPlaylist", /, dry_run=False) -> bool:
+        raise InvalidSyncError(self.__class__, other.__class__)
 
-class Playlist(NamedPlaylist):
+    def to_json(self) -> str:
+        return json.dumps(self.json_data(), indent=2)
+
+    def json_data(self):
+        return {
+            "name": self.name,
+        }
+
+
+class Playlist(NamedPlaylist, TracksSyncer):
     """Represent a playlist."""
 
     def __init__(self, name: str, library: "Library", /, tracks: list[Track] = None):
@@ -78,63 +159,14 @@ class Playlist(NamedPlaylist):
             "tracks": [track.json_data() for track in self.tracks],
         }
 
-    def to_json(self) -> str:
-        return json.dumps(self.json_data(), indent=2)
-
     @property
     def tracks(self) -> Iterable[Track]:
         return self._tracks
 
     def sync_tracks(self, other: "Playlist", /, dry_run=False) -> bool:
-        changed = False
-        # assuming that each track is in a playlist only once
-        remaining_tracks = {t.key() for t in self.tracks}
-        my_iter = enumerate(self.tracks)
-        add_after = None
-        my_idx, my_next_track = next(my_iter, (-1, None))
-        other_iter = enumerate(self.library.map_tracks(other.tracks))
-        other_idx, next_other = next(other_iter, (-1, None))
-        while next_other:
-            log.debug(
-                "checking next track",
-                other_idx=other_idx,
-                next_other=next_other,
-                my_idx=my_idx,
-                my_next_track=my_next_track,
-            )
-            if next_other == my_next_track:
-                add_after = my_next_track
-                remaining_tracks.remove(my_next_track.key())
-                my_idx, my_next_track = next(my_iter, (-1, None))
-                other_idx, next_other = next(other_iter, (-1, None))
-            elif next_other.key() in remaining_tracks:
-                while next_other != my_next_track:
-                    log.debug(
-                        "looking for other",
-                        my_next_track=my_next_track,
-                        next_other=next_other,
-                    )
-                    remaining_tracks.remove(my_next_track.key())
-                    add_after = my_next_track
-                    my_idx, my_next_track = next(my_iter, (-1, None))
-                    assert my_next_track
-            else:
-                log.info(
-                    f"inserting track",
-                    other_idx=other_idx,
-                    next_other=next_other,
-                    my_idx=my_idx,
-                    add_after=add_after,
-                    dry_run=dry_run,
-                )
-                changed = True
-                if not dry_run:
-                    self._add_item(next_other, add_after)
-                add_after = next_other
-                other_idx, next_other = next(other_iter, (-1, None))
-        return changed
+        return self.sync(self.tracks, other.tracks, self.library.map_tracks)
 
-    def _add_item(self, track: Track, after: Track):
+    def add_item(self, track: Track, after: Track):
         if after:
             idx = self._tracks.index(after)
             self._tracks.insert(idx + 1, track)
@@ -165,6 +197,20 @@ class PlaylistFolder(NamedPlaylist):
         return itertools.chain.from_iterable(
             playlist.tracks for playlist in self.sub_playlists
         )
+
+    @multimethod
+    def sync_tracks(self, other: Playlist, /, dry_run=False) -> bool:
+        return super().sync_tracks(other, dry_run=dry_run)
+
+    @multimethod
+    def sync_tracks(self, other: "PlaylistFolder", /, dry_run=False) -> bool:
+        orig_len = len(self.sub_playlists)
+        sub_playlists = {p.name for p in self.sub_playlists}
+        sub_playlists.update({o.name for o in other.sub_playlists})
+        self.sub_playlists = [
+            self.library.find_playlist(name) for name in sub_playlists
+        ]
+        return orig_len != len(self.sub_playlists)
 
 
 class SmartPlaylist(NamedPlaylist):
@@ -202,7 +248,7 @@ class Library:
         return self._tracks
 
     @property
-    def playlists(self) -> list[Playlist]:
+    def playlists(self) -> list[NamedPlaylist]:
         return self._playlists
 
     def json_data(self) -> dict[str, Any]:
@@ -224,7 +270,10 @@ class Library:
         raise NotImplementedError()
 
     def create_playlist(
-        self, playlist_name: str, tracks: Iterable[Track], dry_run=False
+        self,
+        playlist_name: str,
+        source: NamedPlaylist,
+        dry_run=False,
     ) -> None:
         raise NotImplementedError()
 

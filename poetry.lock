@@ -145,6 +145,30 @@ files = [
 all = ["flake8 (>=7.1.1)", "mypy (>=1.11.2)", "pytest (>=8.3.2)", "ruff (>=0.6.2)"]
 
 [[package]]
+name = "multimethod"
+version = "2.0"
+description = "Multiple argument dispatching."
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "multimethod-2.0-py3-none-any.whl", hash = "sha256:45aa231dc9dbb7f980c0f2ad8179e2c2b72a8cd5c7d7534337be66dde29d35be"},
+    {file = "multimethod-2.0.tar.gz", hash = "sha256:c628b6d2e7d61fbe58484dd884d990901e8314faf58af062e72b65e3423cb109"},
+]
+
+[[package]]
+name = "mutagen"
+version = "1.47.0"
+description = "read and write audio tags for many formats"
+optional = false
+python-versions = ">=3.7"
+groups = ["main"]
+files = [
+    {file = "mutagen-1.47.0-py3-none-any.whl", hash = "sha256:edd96f50c5907a9539d8e5bba7245f62c9f520aef333d13392a79a4f70aca719"},
+    {file = "mutagen-1.47.0.tar.gz", hash = "sha256:719fadef0a978c31b4cf3c956261b3c58b6948b32023078a2117b1de09f0fc99"},
+]
+
+[[package]]
 name = "plexapi"
 version = "4.17.0"
 description = "Python bindings for the Plex API."
@@ -318,4 +342,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.13,<4.0"
-content-hash = "24d7ab502135a9b0a74005989f5b8e46c794d0102a0c409f6e4165e2805744d2"
+content-hash = "6f448c659dcaf6d2df233537afdfd1eaa0ed8038a128d3b06b256da9c59b42dc"

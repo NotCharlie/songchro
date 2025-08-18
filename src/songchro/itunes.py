@@ -4,10 +4,17 @@ import unicodedata
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 from urllib.parse import urlparse, unquote
 
-from songchro.model import Library, Track, Playlist, SmartPlaylist, PlaylistFolder
+from songchro.model import (
+    Library,
+    Track,
+    Playlist,
+    SmartPlaylist,
+    PlaylistFolder,
+    NamedPlaylist,
+)
 
 
 @dataclass
@@ -37,7 +44,7 @@ class ItunesPlaylist(Playlist):
         super().__init__(name, library, tracks=tracks)
         self.itunes_playlist = itunes_playlist
 
-    def sync_tracks(self, other: "Playlist", /, dry_run=False):
+    def sync_tracks(self, other: NamedPlaylist, /, dry_run=False):
         raise NotImplemented
 
 
@@ -54,7 +61,7 @@ class ItunesPlaylistFolder(PlaylistFolder):
     def __init__(
         self,
         name: str,
-        sub_playlists: list[ItunesPlaylist],
+        sub_playlists: list[ItunesPlaylist | ItunesSmartPlaylist | Self],
         itunes_playlist: dict[str, Any],
         library: "ItunesLibrary",
     ):
@@ -100,7 +107,7 @@ class ItunesLibrary(Library):
         return list(self.track_for.values())
 
     @cached_property
-    def playlists(self) -> list[Playlist]:
+    def playlists(self) -> list[NamedPlaylist]:
         result: dict[
             str, ItunesPlaylist | ItunesSmartPlaylist | ItunesPlaylistFolder
         ] = {}
