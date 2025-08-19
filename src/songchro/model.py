@@ -164,7 +164,9 @@ class Playlist(NamedPlaylist, TracksSyncer):
         return self._tracks
 
     def sync_tracks(self, other: "Playlist", /, dry_run=False) -> bool:
-        return self.sync(self.tracks, other.tracks, self.library.map_tracks)
+        return self.sync(
+            self.tracks, other.tracks, self.library.map_tracks, dry_run=dry_run
+        )
 
     def add_item(self, track: Track, after: Track):
         if after:

@@ -24,22 +24,26 @@ def list_playlists(
                     click.echo(f"    - {track.name} / {track.artist} / {track.album}")
 
 
-def export_playlist(source: model.Library, name: str, target: model.Library) -> None:
+def export_playlist(
+    source: model.Library, name: str, target: model.Library, dry_run: bool
+) -> None:
     click.echo(f"Exporting {source.source} playlist: {name}")
     playlist = source.find_playlist(name)
     if playlist:
         click.echo(f"Found {source.source} playlist: {name}")
-        target.create_playlist(name, playlist)
+        target.create_playlist(name, playlist, dry_run=dry_run)
     else:
         click.echo(f"No {source.source} playlist: {name}")
 
 
-def export_all_playlists(source: model.Library, target: model.Library) -> None:
+def export_all_playlists(
+    source: model.Library, target: model.Library, dry_run: bool
+) -> None:
     click.echo(f"Exporting all {source.source} playlists to {target.source}")
     for playlist in (
         p for p in source.playlists if not isinstance(p, model.SmartPlaylist)
     ):
-        target.create_playlist(playlist.name, playlist)
+        target.create_playlist(playlist.name, playlist, dry_run)
 
 
 def import_playlist(

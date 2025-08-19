@@ -123,20 +123,22 @@ def itunes_list(ctx, songs: bool, simple: bool, kind: str):
 
 @itunes.command("export")
 @click.argument("playlist_name")
+@click.option("--dry-run", "-d", is_flag=True, help="Dry run.")
 @click.pass_context
-def itunes_export(ctx, playlist_name: str):
+def itunes_export(ctx, playlist_name: str, dry_run: bool):
     """Export an iTunes playlist to the local library."""
     file_library = ctx.obj["file_library"]
     library = ctx.obj["itunes_library"]
-    commands.export_playlist(library, playlist_name, file_library)
+    commands.export_playlist(library, playlist_name, file_library, dry_run=dry_run)
 
 
 @itunes.command("export_all")
+@click.option("--dry-run", "-d", is_flag=True, help="Dry run.")
 @click.pass_context
-def itunes_export_all(ctx):
+def itunes_export_all(ctx, dry_run: bool):
     file_library = ctx.obj["file_library"]
     library = ctx.obj["itunes_library"]
-    commands.export_all_playlists(library, file_library)
+    commands.export_all_playlists(library, file_library, dry_run)
 
 
 def _load_plex_from_config(plex_config: dict[str, Any], code: str) -> PlexLibrary:
@@ -189,20 +191,22 @@ def plex_list(ctx, songs: bool, simple: bool, kind: str):
 
 @plex.command("export")
 @click.argument("playlist_name")
+@click.option("--dry-run", "-d", is_flag=True, help="Dry run.")
 @click.pass_context
-def plex_export(ctx, playlist_name: str):
+def plex_export(ctx, playlist_name: str, dry_run: bool):
     """Export a Plex playlist to the local library."""
     file_library = ctx.obj["file_library"]
     library = ctx.obj["plex_library"]
-    commands.export_playlist(library, playlist_name, file_library)
+    commands.export_playlist(library, playlist_name, file_library, dry_run)
 
 
 @plex.command("export_all")
+@click.option("--dry-run", "-d", is_flag=True, help="Dry run.")
 @click.pass_context
-def plex_export_all(ctx):
+def plex_export_all(ctx, dry_run: bool):
     file_library = ctx.obj["file_library"]
     plex_library = ctx.obj["plex_library"]
-    commands.export_all_playlists(plex_library, file_library)
+    commands.export_all_playlists(plex_library, file_library, dry_run)
 
 
 @plex.command("find")
