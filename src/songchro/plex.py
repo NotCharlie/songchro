@@ -93,6 +93,11 @@ class PlexPlaylistFolder(model.PlaylistFolder, AddsToPlexPlaylist, model.TracksS
         super().__init__(plex_playlist.title, sub_playlists, library)
         self.plex_playlist = plex_playlist
 
+    @property
+    def tracks(self) -> Iterable[model.Track]:
+        deduped = {track: None for track in super().tracks}
+        return deduped.keys()
+
     @multimethod
     def sync_tracks(self, other: model.Playlist, /, dry_run=False) -> bool:
         return super().sync_tracks(other, dry_run=dry_run)
@@ -374,7 +379,7 @@ class PlexLibrary(model.Library):
         self, tracks: Iterable[model.Track], /, dry_run: bool = False
     ) -> list[PlexTrack]:
         errors = []
-        result = []
+        result = {}
         for track in tracks:
             plex_track = self.find_track(track)
             if len(plex_track) != 1:
@@ -384,13 +389,13 @@ class PlexLibrary(model.Library):
                 else:
                     raise RuntimeError(msg)
             else:
-                result.append(plex_track[0])
-        log.info(f"done with map_tracks", errors=errors)
+                result[plex_track[0]] = None
+        log.info(f"done with map_tracks", errors=errors, size=len(result))
         if errors:
             for index, error in enumerate(errors):
                 log.error(f"  {index+1}. {error}")
             raise RuntimeError(f"Found {len(errors)} errors")
-        return result
+        return list(result.keys())
 
     def create_playlist(
         self,
