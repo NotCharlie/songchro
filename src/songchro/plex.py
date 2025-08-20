@@ -4,7 +4,6 @@ import json
 import os.path
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 from typing import Any, Protocol
@@ -43,9 +42,21 @@ class AddsToPlexPlaylist:
             raise RuntimeError(f"incorrect track type: {type(track)} or {type(after)}")
 
 
-@dataclass
 class PlexTrack(model.Track):
-    plex_track: audio.Track
+    def __init__(self, plex_track: audio.Track, library: model.Library):
+        super().__init__(
+            name=plex_track.title,
+            artist=plex_track.artist().title,
+            album=plex_track.album().title,
+            filepath=Path(
+                os.path.relpath(plex_track.locations[0], start=library.music_root)
+            ),
+            album_artist=plex_track.album().artist().title,
+            disc_number=plex_track.parentIndex,
+            track_number=plex_track.index,
+        )
+        self.plex_track = plex_track
+        self.library = library
 
     def key(self):
         return self.plex_track.key
@@ -66,21 +77,7 @@ class PlexPlaylist(model.Playlist, AddsToPlexPlaylist):
 
     @cached_property
     def tracks(self) -> list[model.Track]:
-        return [
-            PlexTrack(
-                plex_track=track,
-                name=track.title,
-                artist=track.artist().title,
-                album=track.album().title,
-                filepath=Path(
-                    os.path.relpath(track.locations[0], start=self.library.music_root)
-                ),
-                album_artist=track.album().artist().title,
-                disc_number=track.parentIndex,
-                track_number=track.index,
-            )
-            for track in self.plex_playlist.items()
-        ]
+        return [PlexTrack(track, self.library) for track in self.plex_playlist.items()]
 
 
 class PlexPlaylistFolder(model.PlaylistFolder, AddsToPlexPlaylist, model.TracksSyncer):
@@ -95,8 +92,7 @@ class PlexPlaylistFolder(model.PlaylistFolder, AddsToPlexPlaylist, model.TracksS
 
     @property
     def tracks(self) -> Iterable[model.Track]:
-        deduped = {track: None for track in super().tracks}
-        return deduped.keys()
+        return [PlexTrack(track, self.library) for track in self.plex_playlist.items()]
 
     @multimethod
     def sync_tracks(self, other: model.Playlist, /, dry_run=False) -> bool:
@@ -106,16 +102,20 @@ class PlexPlaylistFolder(model.PlaylistFolder, AddsToPlexPlaylist, model.TracksS
     def sync_tracks(self, other: model.PlaylistFolder, /, dry_run=False) -> bool:
         orig_tracks = self.tracks
         changed = super().sync_tracks(other, dry_run=dry_run)
-        if changed or orig_tracks != self.tracks:
-            changed |= self.sync(
-                orig_tracks, other.tracks, self.library.map_tracks, dry_run=dry_run
-            )
+        changed |= self.sync(
+            orig_tracks, other.tracks, self.library.map_tracks, dry_run=dry_run
+        )
         if changed:
             self.update_summary()
         return changed
 
     def update_summary(self):
-        summary = f"{FOLDER_METADATA_HEADER}{codecs.decode(base64.encodebytes(codecs.encode(self.to_json())))}\n"
+        plex_playlist_summary = self.plex_playlist.summary
+        if plex_playlist_summary:
+            comment, _ = plex_playlist_summary.split(FOLDER_METADATA_HEADER, 1) + "\n"
+        else:
+            comment = ""
+        summary = f"{comment}{FOLDER_METADATA_HEADER}{codecs.decode(base64.encodebytes(codecs.encode(self.to_json())))}\n"
         self.plex_playlist.editSummary(summary)
 
 
@@ -138,19 +138,7 @@ class PlexLibrary(model.Library):
 
     @cached_property
     def tracks(self) -> list[model.Track]:
-        return [
-            PlexTrack(
-                plex_track=track,
-                name=track.title,
-                artist=track.artist().title,
-                album=track.album().title,
-                filepath=Path(
-                    os.path.relpath(track.locations[0], start=self.music_root)
-                ),
-                album_artist=track.album().artist().title,
-            )
-            for track in self.music.searchTracks()
-        ]
+        return [PlexTrack(track, self) for track in self.music.searchTracks()]
 
     @cached_property
     def playlists(self) -> list[model.NamedPlaylist]:
@@ -359,21 +347,7 @@ class PlexLibrary(model.Library):
         return tightest_match
 
     def find_track(self, to_find: model.Track) -> list[model.Track]:
-        return [
-            PlexTrack(
-                plex_track=track,
-                name=track.title,
-                artist=track.artist().title,
-                album=track.album().title,
-                filepath=Path(
-                    os.path.relpath(track.locations[0], start=self.music_root)
-                ),
-                album_artist=track.album().artist().title,
-                track_number=track.trackNumber,
-                disc_number=track.parentIndex,
-            )
-            for track in self._find_tightest_match(to_find)
-        ]
+        return [PlexTrack(track, self) for track in self._find_tightest_match(to_find)]
 
     def map_tracks(
         self, tracks: Iterable[model.Track], /, dry_run: bool = False
@@ -402,6 +376,7 @@ class PlexLibrary(model.Library):
         playlist_name: str,
         source: model.NamedPlaylist,
         dry_run=False,
+        make_playlist_limit=1500,
     ) -> None:
         if not dry_run:
             try:
@@ -410,11 +385,20 @@ class PlexLibrary(model.Library):
                 raise RuntimeError(f"existing playlist {playlist_name}")
             except NotFound:
                 pass  # expected case
-        plex_tracks = self.map_tracks(source.tracks, dry_run=dry_run)
-        if not dry_run:
-            new_playlist = self._make_playlist(source, playlist_name, plex_tracks)
-            if "playlists" in self.__dict__:
-                self.playlists.append(new_playlist)
+        new_playlist = None
+        source_tracks = list(source.tracks)
+        if len(source_tracks) < make_playlist_limit:
+            plex_tracks = self.map_tracks(source.tracks, dry_run=dry_run)
+            if not dry_run:
+                new_playlist = self._make_playlist(source, playlist_name, plex_tracks)
+        else:
+            log.info("creating empty playlist & syncing", size=len(source_tracks))
+            if not dry_run:
+                first_track = self.map_tracks(source_tracks[:1], dry_run=dry_run)
+                new_playlist = self._make_playlist(source, playlist_name, first_track)
+                new_playlist.sync_tracks(source)
+        if "playlists" in self.__dict__ and new_playlist:
+            self.playlists.append(new_playlist)
 
     @multimethod
     def _make_playlist(
