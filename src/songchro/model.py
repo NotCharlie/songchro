@@ -1,8 +1,8 @@
 import itertools
-import json
 import unicodedata
-from collections.abc import Iterable, Callable
+from collections.abc import Iterable, Callable, Iterator
 from dataclasses import dataclass
+from json import JSONEncoder
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -29,7 +29,7 @@ class TracksSyncer:
         self: CanAddItem,
         my_tracks: Iterable["Track"],
         other: Iterable["Track"],
-        mapper: Callable[[Iterable["Track"]], list["Track"]],
+        mapper: Callable[[Iterable["Track"]], Iterator["Track"]],
         /,
         dry_run=False,
     ) -> bool:
@@ -84,6 +84,13 @@ class TracksSyncer:
         return changed
 
 
+class HasJsonDataEncoder(JSONEncoder):
+    def default(self, o):
+        if hasattr(o, "json_data"):
+            return o.json_data()
+        return super().default(o)
+
+
 @dataclass(kw_only=True)
 class Track:
     """Represent a single song track."""
@@ -95,6 +102,8 @@ class Track:
     disc_number: int | None = None
     track_number: int | None = None
     filepath: Path | str | None = None
+    playcounts: dict[str, int] = None
+    library: "Library" = None
 
     def json_data(self) -> dict[str, Any]:
         data = {
@@ -105,11 +114,9 @@ class Track:
             "disc_number": self.disc_number,
             "track_number": self.track_number,
             "filepath": Path(self.filepath).as_posix() if self.filepath else None,
+            "playcounts": self.playcounts,
         }
         return {key: value for key, value in data.items() if value}
-
-    def to_json(self) -> str:
-        return json.dumps(self.json_data())
 
     def key(self):
         return unicodedata.normalize("NFC", str(self.filepath))
@@ -121,6 +128,9 @@ class Track:
         if isinstance(other, Track):
             return self.key() == other.key()
         return NotImplemented
+
+    def increment_plays(self, increase):
+        self.playcounts[self.library.lib_type] += increase
 
 
 class NamedPlaylist:
@@ -136,9 +146,6 @@ class NamedPlaylist:
 
     def sync_tracks(self, other: "NamedPlaylist", /, dry_run=False) -> bool:
         raise InvalidSyncError(self.__class__, other.__class__)
-
-    def to_json(self) -> str:
-        return json.dumps(self.json_data(), indent=2)
 
     def json_data(self):
         return {
@@ -163,7 +170,7 @@ class Playlist(NamedPlaylist, TracksSyncer):
     def tracks(self) -> Iterable[Track]:
         return self._tracks
 
-    def sync_tracks(self, other: "Playlist", /, dry_run=False) -> bool:
+    def sync_tracks(self, other: NamedPlaylist, /, dry_run=False) -> bool:
         return self.sync(
             self.tracks, other.tracks, self.library.map_tracks, dry_run=dry_run
         )
@@ -216,15 +223,39 @@ class PlaylistFolder(NamedPlaylist):
 
 
 class SmartPlaylist(NamedPlaylist):
-    def __init__(self, name: str, smart_criteria, library: "Library"):
+    def __init__(
+        self,
+        name: str,
+        smart_criteria: dict[str, Any],
+        criteria_key: str,
+        library: "Library",
+    ):
         super().__init__(name, library)
         self.smart_criteria = smart_criteria
+        self.criteria_key = criteria_key
 
     def json_data(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "smart_criteria": self.smart_criteria,
         }
+
+    def _filter(self) -> Callable[[Track], bool]:
+        raise NotImplementedError
+
+    @property
+    def tracks(self) -> Iterable[Track]:
+        if self.criteria_key in self.smart_criteria:
+            fn = self._filter()
+            return (t for t in self.library.tracks if fn(t))
+
+        log.warning(
+            "unable to get `tracks` without criteria",
+            name=self.name,
+            key=self.criteria_key,
+            type=self.__class__.__name__,
+        )
+        return []
 
 
 class Library:
@@ -233,11 +264,13 @@ class Library:
     def __init__(
         self,
         source: str,
+        lib_type: str,
         music_root: Path,
         tracks: list[Track] = None,
         playlists: list[Playlist] = None,
     ):
         self.source = source
+        self.lib_type = lib_type
         self.music_root = music_root
         self._tracks = tracks if tracks else []
         self._playlists = playlists if playlists else []
@@ -260,15 +293,12 @@ class Library:
         }
         return data
 
-    def to_json(self) -> str:
-        return json.dumps(self.json_data(), indent=2)
-
     def find_track(self, track: Track) -> list[Track]:
         raise NotImplementedError()
 
     def map_tracks(
         self, tracks: Iterable[Track], /, dry_run: bool = False
-    ) -> list[Track]:
+    ) -> Iterator[Track]:
         raise NotImplementedError()
 
     def create_playlist(

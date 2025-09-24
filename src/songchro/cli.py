@@ -18,8 +18,6 @@ import songchro.plex as pl
 from songchro import __version__
 from songchro import commands
 from songchro import model
-from songchro.plex import PlexLibrary
-
 
 CLASS_FOR_KIND = {
     "plain": model.Playlist,
@@ -58,6 +56,7 @@ def cli(ctx, logging_level: str, config_file: str):
 
     file_config = config.get("file", {})
     ctx.obj["file_library"] = fl.load_library(
+        os.path.expanduser(file_config.get("tracks")),
         os.path.expanduser(file_config.get("root")),
         os.path.expanduser(file_config.get("music_root")),
     )
@@ -89,15 +88,27 @@ def file_list(
     commands.list_playlists(library, songs, simple, CLASS_FOR_KIND[kind])
 
 
+@file.command("update-meta")
+@click.argument("subdir", required=False, default="", type=Path)
+@click.pass_context
+def file_update_meta(ctx, subdir):
+    library: fl.FileLibrary = ctx.obj["file_library"]
+    library.update_metadata(subdir=subdir)
+
+
+def _load_itunes_from_config(itunes_config: dict[str, Any]) -> it.ItunesLibrary:
+    return it.load_library(
+        os.path.expanduser(itunes_config.get("xml")),
+        os.path.expanduser(itunes_config.get("music_root")),
+    )
+
+
 @cli.group()
 @click.pass_context
 def itunes(ctx):
     """Commands for working with iTunes playlists."""
-    itunes_config = ctx.obj["config"].get("itunes", {})
-    ctx.obj["itunes_library"] = it.load_library(
-        os.path.expanduser(itunes_config.get("xml")),
-        os.path.expanduser(itunes_config.get("music_root")),
-    )
+    itunes_config = ctx.obj["config"].get(it.LIBRARY_TYPE, {})
+    ctx.obj["itunes_library"] = _load_itunes_from_config(itunes_config)
 
 
 @itunes.command("list")
@@ -141,7 +152,7 @@ def itunes_export_all(ctx, dry_run: bool):
     commands.export_all_playlists(library, file_library, dry_run)
 
 
-def _load_plex_from_config(plex_config: dict[str, Any], code: str) -> PlexLibrary:
+def _load_plex_from_config(plex_config: dict[str, Any], code: str) -> pl.PlexLibrary:
     plex_music_root = plex_config.get("music_root")
     section = plex_config.get("section")
 
@@ -169,7 +180,7 @@ def plex(
     code: str,
 ):
     """Commands for working with Plex playlists."""
-    plex_config = ctx.obj["config"].get("plex", {})
+    plex_config = ctx.obj["config"].get(pl.LIBRARY_TYPE, {})
     ctx.obj["plex_library"] = _load_plex_from_config(plex_config, code)
 
 
@@ -265,16 +276,16 @@ def plex_import(ctx, playlist: str, dry_run: bool):
 @click.option(
     "--source-type",
     "--from",
-    type=click.Choice(["itunes", "plex", "file"]),
-    default="file",
-    help="Source playlist type (default: file)",
+    type=click.Choice([it.LIBRARY_TYPE, pl.LIBRARY_TYPE, fl.LIBRARY_TYPE]),
+    default=fl.LIBRARY_TYPE,
+    help=f"Source playlist type (default: {fl.LIBRARY_TYPE})",
 )
 @click.option(
     "--destination-type",
     "--to",
-    type=click.Choice(["itunes", "plex", "file"]),
-    default="plex",
-    help="Destination playlist type (default: plex)",
+    type=click.Choice([it.LIBRARY_TYPE, pl.LIBRARY_TYPE, fl.LIBRARY_TYPE]),
+    default=pl.LIBRARY_TYPE,
+    help=f"Destination playlist type (default: {pl.LIBRARY_TYPE})",
 )
 @click.option("--code", "-c", type=str, help="OTP code for Plex account.")
 @click.option("--dry-run", "-d", is_flag=True, help="Dry run.")
@@ -293,23 +304,42 @@ def sync(
         f"Syncing from {source_type} to {destination_type} for playlist '{playlist}' "
     )
     libs: dict[str, model.Library] = {}
-    if source_type == "itunes" or destination_type == "itunes":
-        itunes_config = ctx.obj["config"].get("itunes", {})
-        libs["itunes"] = it.load_library(
+    if source_type == it.LIBRARY_TYPE or destination_type == it.LIBRARY_TYPE:
+        itunes_config = ctx.obj["config"].get(it.LIBRARY_TYPE, {})
+        libs[it.LIBRARY_TYPE] = it.load_library(
             os.path.expanduser(itunes_config.get("xml")),
             os.path.expanduser(itunes_config.get("music_root")),
         )
-    if source_type == "plex" or destination_type == "plex":
-        plex_config = ctx.obj["config"].get("plex", {})
-        libs["plex"] = _load_plex_from_config(plex_config, code)
-    if source_type == "file" or destination_type == "file":
-        libs["file"] = ctx.obj["file_library"]
+    if source_type == pl.LIBRARY_TYPE or destination_type == pl.LIBRARY_TYPE:
+        plex_config = ctx.obj["config"].get(pl.LIBRARY_TYPE, {})
+        libs[pl.LIBRARY_TYPE] = _load_plex_from_config(plex_config, code)
+    if source_type == fl.LIBRARY_TYPE or destination_type == fl.LIBRARY_TYPE:
+        libs[fl.LIBRARY_TYPE] = ctx.obj["file_library"]
 
     src = libs[source_type].find_playlist(playlist)
     dest = libs[destination_type].find_playlist(playlist)
 
     click.echo(f"Syncing from {src} to {dest}...")
     dest.sync_tracks(src, dry_run=dry_run)
+
+
+@cli.command()
+@click.option("--code", "-c", type=str, help="OTP code for Plex account.")
+@click.option("--dry-run", "-d", is_flag=True, help="Dry run.")
+@click.option("--skip-increase", is_flag=True, help="Skip calling `increase_plays`")
+@click.pass_context
+def sync_plays(ctx, code, dry_run, skip_increase):
+    itunes_config = ctx.obj["config"].get(it.LIBRARY_TYPE, {})
+    itunes_library = _load_itunes_from_config(itunes_config)
+    plex_config = ctx.obj["config"].get(pl.LIBRARY_TYPE, {})
+    plex_library = _load_plex_from_config(plex_config, code)
+    file_library = ctx.obj["file_library"]
+    commands.sync_plays(
+        file_library,
+        {pl.LIBRARY_TYPE: plex_library, it.LIBRARY_TYPE: itunes_library},
+        dry_run=dry_run,
+        skip_increase=skip_increase,
+    )
 
 
 if __name__ == "__main__":

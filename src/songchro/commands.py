@@ -1,8 +1,12 @@
+from collections import defaultdict
 from typing import Type
 
 import click
+import structlog
 
-from songchro import model
+from songchro import model, file_library
+
+log = structlog.get_logger()
 
 
 def list_playlists(
@@ -61,3 +65,58 @@ def import_playlist(
             click.echo(f"DRY-RUN: skip creating {target.source} playlist {name}")
     else:
         click.echo(f"No {source.source} playlist: {name}")
+
+
+def sync_plays(
+    dest: file_library.FileLibrary,
+    srcs: dict[str, model.Library],
+    /,
+    dry_run=False,
+    skip_increase=False,
+):
+    all_keys = set(key for key in srcs.keys())
+    updates = {}
+    for track in dest.tracks:
+        lib_track: dict[str, model.Track] = {}
+        increase_for = defaultdict(int)
+        for libname in all_keys:
+            lib_tracks = srcs[libname].find_track(track)
+            if lib_tracks:
+                lib_track[libname] = lib_tracks[0]
+                lib_count = lib_tracks[0].playcounts.get(libname, 0)
+                dest_count = track.playcounts.get(libname, 0)
+                delta = lib_count - dest_count
+                for others in all_keys - {libname}:
+                    increase_for[others] += delta
+            else:
+                log.debug(
+                    "no matching track for playcount", libname=libname, track=track
+                )
+        updates[track] = (lib_track, increase_for)
+
+    for track, (lib_track, increase_for) in updates.items():
+        log.info("increments for track", track=track, increase_for=increase_for)
+        for libname in all_keys:
+            if libname in lib_track:
+                if not dry_run:
+                    if (increase := increase_for.get(libname)) and not skip_increase:
+                        lib_track[libname].increment_plays(increase)
+                    track.playcounts[libname] = lib_track[libname].playcounts[libname]
+                else:
+                    log.debug(
+                        "DRY-RUN: skipping play count updates",
+                        track=track,
+                        increase_for=increase_for,
+                    )
+            else:
+                log.warning(
+                    "no matching track for `increment_plays`",
+                    libname=libname,
+                    track=track,
+                )
+        log.info("resulting play counts", track=track)
+
+    if not dry_run:
+        dest.save_tracks()
+    else:
+        click.echo("skipping updates to track file")

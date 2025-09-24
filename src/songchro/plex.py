@@ -3,7 +3,8 @@ import codecs
 import json
 import os.path
 import re
-from collections.abc import Iterable
+import unicodedata
+from collections.abc import Iterable, Iterator, Generator
 from functools import cached_property
 from pathlib import Path
 from typing import Any, Protocol
@@ -17,11 +18,14 @@ from plexapi.myplex import MyPlexAccount
 from plexapi.server import PlexServer
 
 from songchro import model
+from songchro.model import HasJsonDataEncoder
 
 log = structlog.get_logger()
 
 
 FOLDER_METADATA_HEADER = "### Songchro Folder metadata below, do NOT modify ###\n"
+SMART_METADATA_HEADER = "### Songchro Smart metadata below, do NOT modify ###\n"
+LIBRARY_TYPE = "plex"
 
 
 class HasPlexPlaylist(Protocol):
@@ -54,9 +58,10 @@ class PlexTrack(model.Track):
             album_artist=plex_track.album().artist().title,
             disc_number=plex_track.parentIndex,
             track_number=plex_track.index,
+            playcounts={LIBRARY_TYPE: plex_track.viewCount},
+            library=library,
         )
         self.plex_track = plex_track
-        self.library = library
 
     def key(self):
         return self.plex_track.key
@@ -68,6 +73,11 @@ class PlexTrack(model.Track):
         if isinstance(other, PlexTrack):
             return self.key() == other.key()
         return NotImplemented
+
+    def increment_plays(self, increase):
+        super().increment_plays(increase)
+        for i in range(increase):
+            self.plex_track.markPlayed()
 
 
 class PlexPlaylist(model.Playlist, AddsToPlexPlaylist):
@@ -115,25 +125,72 @@ class PlexPlaylistFolder(model.PlaylistFolder, AddsToPlexPlaylist, model.TracksS
             comment, _ = plex_playlist_summary.split(FOLDER_METADATA_HEADER, 1) + "\n"
         else:
             comment = ""
-        summary = f"{comment}{FOLDER_METADATA_HEADER}{codecs.decode(base64.encodebytes(codecs.encode(self.to_json())))}\n"
+        summary = f"{comment}{FOLDER_METADATA_HEADER}{codecs.decode(base64.encodebytes(codecs.encode(json.dumps(self, cls=HasJsonDataEncoder))))}\n"
         self.plex_playlist.editSummary(summary)
 
 
 class PlexSmartPlaylist(model.SmartPlaylist):
-    def __init__(self, plex_playlist: playlist.Playlist, plex_lib: "PlexLibrary"):
-        super().__init__(plex_playlist.title, "TODO", plex_lib)
+    def __init__(
+        self,
+        plex_playlist: playlist.Playlist,
+        smart_criteria: dict[str, Any],
+        plex_lib: "PlexLibrary",
+    ):
+        super().__init__(
+            plex_playlist.title,
+            smart_criteria,
+            LIBRARY_TYPE,
+            plex_lib,
+        )
         self.plex_playlist = plex_playlist
-        self.plex_filters = plex_playlist.filters()
 
-    def json_data(self) -> dict[str, Any]:
-        data = super().json_data()
-        data["filters"] = self.plex_filters
-        return data
+    @property
+    def tracks(self) -> Iterable[model.Track]:
+        return (PlexTrack(track, self.library) for track in self.plex_playlist.items())
+
+    def update_summary(self):
+        plex_playlist_summary = self.plex_playlist.summary
+        if plex_playlist_summary:
+            comment, _ = plex_playlist_summary.split(SMART_METADATA_HEADER, 1) + "\n"
+        else:
+            comment = ""
+        summary = f"{comment}{SMART_METADATA_HEADER}{codecs.decode(base64.encodebytes(codecs.encode(json.dumps(self, cls=HasJsonDataEncoder))))}\n"
+        self.plex_playlist.editSummary(summary)
+
+
+class PlexFilterSmartPlaylist(PlexSmartPlaylist):
+    def __init__(
+        self,
+        plex_playlist: playlist.Playlist,
+        plex_lib: "PlexLibrary",
+    ):
+        super().__init__(
+            plex_playlist,
+            {LIBRARY_TYPE: plex_playlist.filters()},
+            plex_lib,
+        )
+
+
+class PlexExternalSmartPlaylist(
+    PlexSmartPlaylist, AddsToPlexPlaylist, model.TracksSyncer
+):
+    def __init__(
+        self,
+        plex_playlist: playlist.Playlist,
+        smart_criteria: dict[str, Any],
+        plex_lib: "PlexLibrary",
+    ):
+        super().__init__(plex_playlist, smart_criteria, plex_lib)
+
+    def sync_tracks(self, other: model.NamedPlaylist, /, dry_run=False) -> bool:
+        return self.sync(
+            self.tracks, other.tracks, self.library.map_tracks, dry_run=dry_run
+        )
 
 
 class PlexLibrary(model.Library):
     def __init__(self, music_root: Path, music: MusicSection):
-        super().__init__("Plex", music_root)
+        super().__init__("Plex", LIBRARY_TYPE, music_root)
         self.music = music
 
     @cached_property
@@ -147,12 +204,21 @@ class PlexLibrary(model.Library):
         for pl in self.music.playlists():
             summary = pl.summary.replace("\r\n", "\n")
             if pl.smart:
-                result[pl.title] = PlexSmartPlaylist(pl, self)
+                result[pl.title] = PlexFilterSmartPlaylist(pl, self)
+            elif SMART_METADATA_HEADER in summary:
+                # Decode the base64-encoded metadata following the header.
+                _, b64_data = summary.split(SMART_METADATA_HEADER, 1)
+                decoded_bytes = base64.decodebytes(codecs.encode(b64_data))
+                # The decoded bytes represent the JSON of a smart criteria
+                smart_json = json.loads(decoded_bytes)
+                result[pl.title] = PlexExternalSmartPlaylist(
+                    pl, smart_json["smart_criteria"], self
+                )
             elif FOLDER_METADATA_HEADER in summary:
                 # Decode the base64-encoded metadata following the header.
                 _, b64_data = summary.split(FOLDER_METADATA_HEADER, 1)
                 decoded_bytes = base64.decodebytes(codecs.encode(b64_data))
-                # The decoded bytes represent the JSON of a playlist folder;
+                # The decoded bytes represent the JSON of a playlist folder
                 folder_json = json.loads(decoded_bytes)
                 named_subs = [
                     model.NamedPlaylist(name, self)
@@ -188,9 +254,10 @@ class PlexLibrary(model.Library):
             " An ": " an ",
             " Of ": " of ",
             " On ": " on ",
-            " & ": " and ",
+            " & ": " And ",
             " And ": " and ",
-            " and ": " & ",
+            " and ": " + ",
+            " + ": " & ",
             " With ": " with ",
             " In ": " in ",
             "?": "",
@@ -311,6 +378,12 @@ class PlexLibrary(model.Library):
                     query = self._make_filter({key: subqueries[key] for key in fields})
                     log.debug("query", query=query)
                     tracks = []
+
+                    def normalized_endswith(src, to_find) -> bool:
+                        norm_src = unicodedata.normalize("NFC", src)
+                        norm_to_find = unicodedata.normalize("NFC", to_find)
+                        return norm_src.endswith(norm_to_find)
+
                     try:
                         tracks = [
                             track
@@ -320,8 +393,10 @@ class PlexLibrary(model.Library):
                                 or not to_find.disc_number
                             )
                             and (
-                                track.locations[0].endswith(to_find.filepath)
-                                or not to_find.filepath
+                                not to_find.filepath
+                                or normalized_endswith(
+                                    track.locations[0], to_find.filepath
+                                )
                             )
                         ]
                         log.debug("resulting tracks", tracks=tracks)
@@ -351,9 +426,9 @@ class PlexLibrary(model.Library):
 
     def map_tracks(
         self, tracks: Iterable[model.Track], /, dry_run: bool = False
-    ) -> list[PlexTrack]:
+    ) -> Iterator[model.Track]:
         errors = []
-        result = {}
+        size = 0
         for track in tracks:
             plex_track = self.find_track(track)
             if len(plex_track) != 1:
@@ -363,13 +438,13 @@ class PlexLibrary(model.Library):
                 else:
                     raise RuntimeError(msg)
             else:
-                result[plex_track[0]] = None
-        log.info(f"done with map_tracks", errors=errors, size=len(result))
+                size += 1
+                yield plex_track[0]
+        log.info(f"done with map_tracks", errors=errors, size=size)
         if errors:
             for index, error in enumerate(errors):
                 log.error(f"  {index+1}. {error}")
             raise RuntimeError(f"Found {len(errors)} errors")
-        return list(result.keys())
 
     def create_playlist(
         self,
@@ -402,7 +477,7 @@ class PlexLibrary(model.Library):
 
     @multimethod
     def _make_playlist(
-        self, _: model.Playlist, name: str, tracks: list[PlexTrack]
+        self, _: model.Playlist, name: str, tracks: Generator
     ) -> PlexPlaylist:
         return self.music.createPlaylist(name, [tr.plex_track for tr in tracks])
 
@@ -411,11 +486,31 @@ class PlexLibrary(model.Library):
         self,
         source: model.PlaylistFolder,
         name: str,
-        tracks: list[PlexTrack],
+        tracks: Generator,
     ) -> PlexPlaylistFolder:
         new_playlist = self.music.createPlaylist(name, [tr.plex_track for tr in tracks])
         subs = [self.find_playlist(p.name) for p in source.sub_playlists]
         result = PlexPlaylistFolder(new_playlist, subs, self)
+        result.update_summary()
+        return result
+
+    @multimethod
+    def _make_playlist(
+        self,
+        source: model.SmartPlaylist,
+        name: str,
+        tracks: Generator,
+    ) -> PlexSmartPlaylist:
+        if plex_filters := source.smart_criteria.get(LIBRARY_TYPE):
+            new_playlist = self.music.createPlaylist(name, smart=True, **plex_filters)
+            result = PlexFilterSmartPlaylist(new_playlist, self)
+        else:
+            new_playlist = self.music.createPlaylist(
+                name, [tr.plex_track for tr in tracks]
+            )
+            result = PlexExternalSmartPlaylist(
+                new_playlist, source.smart_criteria, self
+            )
         result.update_summary()
         return result
 

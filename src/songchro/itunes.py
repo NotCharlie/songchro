@@ -1,11 +1,12 @@
 import os
 import plistlib
 import unicodedata
-from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
 from typing import Any, Self
 from urllib.parse import urlparse, unquote
+
+import structlog
 
 from songchro.model import (
     Library,
@@ -16,10 +17,32 @@ from songchro.model import (
     NamedPlaylist,
 )
 
+LIBRARY_TYPE = "itunes"
 
-@dataclass
+log = structlog.get_logger()
+
+
 class ItunesTrack(Track):
-    itunes_track: dict[str, Any] = field(repr=False)
+    def __init__(
+        self, track: dict[str, Any], music_root: str, library: "ItunesLibrary"
+    ):
+        self.itunes_track = track
+        location = track.get("Location", None)
+        parsed = urlparse(location)
+        path = unquote(parsed.path) if parsed.path else None
+        filepath = Path(os.path.relpath(path, start=music_root)) if path else None
+
+        super().__init__(
+            name=track["Name"],
+            artist=track.get("Artist", None),
+            album=track.get("Album", None),
+            album_artist=track.get("Album Artist", None),
+            disc_number=track.get("Disc Number", 1),
+            track_number=track.get("Track Number", None),
+            filepath=filepath,
+            playcounts={LIBRARY_TYPE: track.get("Play Count", 0)},
+            library=library,
+        )
 
     def key(self):
         return unicodedata.normalize("NFC", self.itunes_track["Track ID"])
@@ -31,6 +54,13 @@ class ItunesTrack(Track):
         if isinstance(other, ItunesTrack):
             return self.key() == other.key()
         return NotImplemented
+
+    def increment_plays(self, increase):
+        log.info(
+            "attempting to increment_plays, not supported",
+            increase=increase,
+            cls=self.__class__,
+        )
 
 
 class ItunesPlaylist(Playlist):
@@ -45,16 +75,22 @@ class ItunesPlaylist(Playlist):
         self.itunes_playlist = itunes_playlist
 
     def sync_tracks(self, other: NamedPlaylist, /, dry_run=False):
-        raise NotImplemented
+        raise NotImplementedError
 
 
 class ItunesSmartPlaylist(SmartPlaylist):
     def __init__(
-        self, name: str, smart_criteria, itunes_playlist: dict, library: "ItunesLibrary"
+        self,
+        name: str,
+        itunes_criteria,
+        itunes_playlist: dict,
+        tracks: list[Track],
+        library: "ItunesLibrary",
     ):
-        super().__init__(name, "TODO", library)
+        super().__init__(name, {}, LIBRARY_TYPE, library)
+        self.tracks = tracks
         self.itunes_playlist = itunes_playlist
-        self.itunes_criteria = smart_criteria
+        self.itunes_criteria = itunes_criteria
 
 
 class ItunesPlaylistFolder(PlaylistFolder):
@@ -75,36 +111,31 @@ class ItunesLibrary(Library):
         music_root: Path,
         itunes_library: dict[str, Any],
     ):
-        super().__init__("iTunes", music_root)
+        super().__init__("iTunes", LIBRARY_TYPE, music_root)
         self.itunes_library = itunes_library
 
     @cached_property
-    def track_for(self) -> dict[str, ItunesTrack]:
+    def track_for_id(self) -> dict[str, ItunesTrack]:
         result: dict[str, ItunesTrack] = {}
         for track in self.itunes_library["Tracks"].values():
             track_id = track["Track ID"]
-            location = track.get("Location", None)
-            parsed = urlparse(location)
-            path = unquote(parsed.path) if parsed.path else None
-            filepath = (
-                Path(os.path.relpath(path, start=self.music_root)) if path else None
-            )
-            itunes_track = ItunesTrack(
-                itunes_track=track,
-                name=track["Name"],
-                artist=track.get("Artist", None),
-                album=track.get("Album", None),
-                album_artist=track.get("Album Artist", None),
-                disc_number=track.get("Disc Number", 1),
-                track_number=track.get("Track Number", None),
-                filepath=filepath,
-            )
+            itunes_track = ItunesTrack(track, str(self.music_root), self)
             result[str(track_id)] = itunes_track
         return result
 
     @cached_property
+    def track_for_path(self) -> dict[str, ItunesTrack]:
+        return {
+            unicodedata.normalize("NFC", str(track.filepath)): track
+            for track in self.track_for_id.values()
+        }
+
+    def _find_track_for_path(self, fpath: str) -> ItunesTrack:
+        return self.track_for_path.get(unicodedata.normalize("NFC", fpath))
+
+    @cached_property
     def tracks(self) -> list[ItunesTrack]:
-        return list(self.track_for.values())
+        return list(self.track_for_id.values())
 
     @cached_property
     def playlists(self) -> list[NamedPlaylist]:
@@ -117,6 +148,11 @@ class ItunesLibrary(Library):
             if playlist.get("Distinguished Kind", None):
                 continue
 
+            playlist_tracks = []
+            for playlist_item in playlist.get("Playlist Items", []):
+                track_id = playlist_item["Track ID"]
+                playlist_tracks.append(self.track_for_id[str(track_id)])
+
             if playlist.get("Folder", False):
                 itunes_playlist = ItunesPlaylistFolder(
                     name=playlist["Name"],
@@ -128,15 +164,11 @@ class ItunesLibrary(Library):
                 itunes_playlist = ItunesSmartPlaylist(
                     name=playlist["Name"],
                     library=self,
-                    smart_criteria=playlist["Smart Info"],
+                    itunes_criteria=playlist["Smart Info"],
                     itunes_playlist=playlist,
+                    tracks=playlist_tracks,
                 )
             else:
-                playlist_tracks = []
-                for playlist_item in playlist.get("Playlist Items", []):
-                    track_id = playlist_item["Track ID"]
-                    playlist_tracks.append(self.track_for[str(track_id)])
-
                 itunes_playlist = ItunesPlaylist(
                     itunes_playlist=playlist,
                     name=playlist["Name"],
@@ -157,6 +189,10 @@ class ItunesLibrary(Library):
                 ), f"{parent_id} is not an ItunesPlaylistFolder"
                 parent_playlist.sub_playlists.append(playlist)
         return list(result.values())
+
+    def find_track(self, track: Track) -> list[Track]:
+        track = self._find_track_for_path(track.filepath)
+        return [track] if track else []
 
 
 def load_library(xml: str, music_root: str) -> ItunesLibrary:
