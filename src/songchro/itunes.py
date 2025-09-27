@@ -3,7 +3,7 @@ import plistlib
 import unicodedata
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Self, Iterable
 from urllib.parse import urlparse, unquote
 
 import structlog
@@ -45,7 +45,7 @@ class ItunesTrack(Track):
         )
 
     def key(self):
-        return unicodedata.normalize("NFC", self.itunes_track["Track ID"])
+        return self.itunes_track["Track ID"]
 
     def __hash__(self):
         return hash(self.key())
@@ -75,7 +75,7 @@ class ItunesPlaylist(Playlist):
         self.itunes_playlist = itunes_playlist
 
     def sync_tracks(self, other: NamedPlaylist, /, dry_run=False):
-        raise NotImplementedError
+        super().sync_tracks(other, dry_run=dry_run)
 
 
 class ItunesSmartPlaylist(SmartPlaylist):
@@ -88,9 +88,13 @@ class ItunesSmartPlaylist(SmartPlaylist):
         library: "ItunesLibrary",
     ):
         super().__init__(name, {}, LIBRARY_TYPE, library)
-        self.tracks = tracks
+        self._tracks = tracks
         self.itunes_playlist = itunes_playlist
         self.itunes_criteria = itunes_criteria
+
+    @property
+    def tracks(self) -> Iterable[Track]:
+        return self._tracks
 
 
 class ItunesPlaylistFolder(PlaylistFolder):
