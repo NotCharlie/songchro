@@ -211,9 +211,12 @@ class PlaylistFolder(NamedPlaylist):
 
     @property
     def tracks(self) -> Iterable[Track]:
-        return itertools.chain.from_iterable(
-            playlist.tracks for playlist in self.sub_playlists
-        )
+        seen = set()
+        for playlist in self.sub_playlists:
+            for track in playlist.tracks:
+                if track not in seen:
+                    seen.add(track)
+                    yield track
 
     @multimethod
     def sync_tracks(self, other: Playlist, /, dry_run=False) -> bool:
