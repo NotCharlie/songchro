@@ -80,7 +80,7 @@ class PlexTrack(model.Track):
             self.plex_track.markPlayed()
 
 
-class PlexPlaylist(model.Playlist, AddsToPlexPlaylist):
+class PlexPlaylist(AddsToPlexPlaylist, model.Playlist):
     def __init__(self, plex_playlist: playlist.Playlist, plex_lib: "PlexLibrary"):
         super().__init__(plex_playlist.title, plex_lib)
         self.plex_playlist = plex_playlist
@@ -90,7 +90,7 @@ class PlexPlaylist(model.Playlist, AddsToPlexPlaylist):
         return [PlexTrack(track, self.library) for track in self.plex_playlist.items()]
 
 
-class PlexPlaylistFolder(model.PlaylistFolder, AddsToPlexPlaylist, model.TracksSyncer):
+class PlexPlaylistFolder(AddsToPlexPlaylist, model.TracksSyncer, model.PlaylistFolder):
     def __init__(
         self,
         plex_playlist: playlist.Playlist,
@@ -115,14 +115,15 @@ class PlexPlaylistFolder(model.PlaylistFolder, AddsToPlexPlaylist, model.TracksS
         changed |= self.sync(
             orig_tracks, other.tracks, self.library.map_tracks, dry_run=dry_run
         )
-        if changed:
+        if not dry_run and changed:
             self.update_summary()
         return changed
 
     def update_summary(self):
         plex_playlist_summary = self.plex_playlist.summary
         if plex_playlist_summary:
-            comment, _ = plex_playlist_summary.split(FOLDER_METADATA_HEADER, 1) + "\n"
+            comment, _ = plex_playlist_summary.split(FOLDER_METADATA_HEADER, 1)
+            comment += "\n"
         else:
             comment = ""
         summary = f"{comment}{FOLDER_METADATA_HEADER}{codecs.decode(base64.encodebytes(codecs.encode(json.dumps(self, cls=HasJsonDataEncoder))))}\n"
@@ -151,7 +152,8 @@ class PlexSmartPlaylist(model.SmartPlaylist):
     def update_summary(self):
         plex_playlist_summary = self.plex_playlist.summary
         if plex_playlist_summary:
-            comment, _ = plex_playlist_summary.split(SMART_METADATA_HEADER, 1) + "\n"
+            comment, _ = plex_playlist_summary.split(SMART_METADATA_HEADER, 1)
+            comment += "\n"
         else:
             comment = ""
         summary = f"{comment}{SMART_METADATA_HEADER}{codecs.decode(base64.encodebytes(codecs.encode(json.dumps(self, cls=HasJsonDataEncoder))))}\n"
