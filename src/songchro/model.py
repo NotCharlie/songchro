@@ -12,7 +12,11 @@ from multimethod import multimethod
 log = structlog.get_logger()
 
 
-class InvalidSyncError(Exception):
+class SongchroException(Exception):
+    pass
+
+
+class InvalidSyncError(SongchroException):
     def __init__(self, target: type, source: type):
         super().__init__(f"Cannot sync to {target.__name__} from {source.__name__}")
         self.target = target

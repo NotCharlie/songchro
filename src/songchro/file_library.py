@@ -19,12 +19,17 @@ from songchro.model import (
     Library,
     NamedPlaylist,
     HasJsonDataEncoder,
+    SongchroException,
 )
 
 log = structlog.get_logger()
 
 
 LIBRARY_TYPE: str = "file"
+
+
+class InvalidTrack(SongchroException):
+    pass
 
 
 class HasFilename(Protocol):
@@ -113,6 +118,12 @@ class FilePlaylist(Playlist, FilePlaylistPersistence):
             if not dry_run:
                 self.write_file()
         return changed
+
+    def json_data(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "tracks": [track.filepath for track in self.tracks],
+        }
 
 
 class FilePlaylistFolder(PlaylistFolder, FilePlaylistPersistence):
@@ -230,10 +241,15 @@ class FileLibrary(Library):
                             self,
                         )
                 else:
-                    pl_tracks = [
-                        self._find_track_for_path(track["filepath"])
-                        for track in to_import.get("tracks", [])
-                    ]
+                    pl_tracks = []
+                    for track in to_import.get("tracks", []):
+                        if isinstance(track, str):
+                            filepath = track
+                        elif isinstance(track, dict):
+                            filepath = track["filepath"]
+                        else:
+                            raise InvalidTrack(track)
+                        pl_tracks.append(self._find_track_for_path(filepath))
                     new_playlist = FilePlaylist(
                         to_import["name"], Path(filename), self, tracks=pl_tracks
                     )
@@ -334,6 +350,14 @@ class FileLibrary(Library):
             json.dump(
                 self.track_for_path, f, cls=HasJsonDataEncoder, indent=2, sort_keys=True
             )
+
+    @multimethod
+    def migrate_playlist(self, playlist: FilePlaylist):
+        playlist.write_file()
+
+    @multimethod
+    def migrate_playlist(self, playlist: NamedPlaylist):
+        log.warning("no migration needed", type=playlist.__class__.__name__)
 
 
 def mp3_m4a_files(root_dir: str | os.PathLike) -> Iterator[Path]:

@@ -96,6 +96,14 @@ def file_update_meta(ctx, subdir):
     library.update_metadata(subdir=subdir)
 
 
+@file.command("migrate")
+@click.argument("playlist", required=True, type=str)
+@click.pass_context
+def file_migrate_playlist(ctx, playlist):
+    library: fl.FileLibrary = ctx.obj["file_library"]
+    library.migrate_playlist(library.find_playlist(playlist))
+
+
 def _load_itunes_from_config(itunes_config: dict[str, Any]) -> it.ItunesLibrary:
     return it.load_library(
         os.path.expanduser(itunes_config.get("xml")),
