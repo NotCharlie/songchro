@@ -23,6 +23,10 @@ class InvalidSyncError(SongchroException):
         self.source = source
 
 
+class NoSuchPlaylist(SongchroException):
+    pass
+
+
 class CanAddItem(Protocol):
     def add_item(self, track: "Track", after: "Track") -> None:
         raise NotImplementedError
@@ -313,7 +317,8 @@ class Library:
     ) -> None:
         raise NotImplementedError()
 
-    def find_playlist(self, playlist_name: str) -> Playlist | None:
-        playlists = (pl for pl in self.playlists if pl.name == playlist_name)
-        playlist = next(playlists, None)
-        return playlist
+    def find_playlist(self, playlist_name: str) -> NamedPlaylist:
+        for pl in self.playlists:
+            if pl.name == playlist_name:
+                return pl
+        raise NoSuchPlaylist(playlist_name)
