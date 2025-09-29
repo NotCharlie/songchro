@@ -34,14 +34,10 @@ class HasPlexPlaylist(Protocol):
 
 class AddsToPlexPlaylist:
     def add_item(self: HasPlexPlaylist, track: model.Track, after: model.Track) -> None:
-        if isinstance(track, PlexTrack) and (
-            isinstance(after, PlexTrack) or after is None
-        ):
+        if isinstance(track, PlexTrack) and (isinstance(after, PlexTrack) or after is None):
             self.plex_playlist.addItems([track.plex_track])
             self.plex_playlist.reload()  # TODO: figure out why @cached_data_property on _items not forcing reload
-            self.plex_playlist.moveItem(
-                track.plex_track, after.plex_track if after else None
-            )
+            self.plex_playlist.moveItem(track.plex_track, after.plex_track if after else None)
         else:
             raise RuntimeError(f"incorrect track type: {type(track)} or {type(after)}")
 
@@ -52,9 +48,7 @@ class PlexTrack(model.Track):
             name=plex_track.title,
             artist=plex_track.artist().title,
             album=plex_track.album().title,
-            filepath=Path(
-                os.path.relpath(plex_track.locations[0], start=library.music_root)
-            ),
+            filepath=Path(os.path.relpath(plex_track.locations[0], start=library.music_root)),
             album_artist=plex_track.album().artist().title,
             disc_number=plex_track.parentIndex,
             track_number=plex_track.index,
@@ -112,9 +106,7 @@ class PlexPlaylistFolder(AddsToPlexPlaylist, model.TracksSyncer, model.PlaylistF
     def sync_tracks(self, other: model.PlaylistFolder, /, dry_run=False) -> bool:
         orig_tracks = self.tracks
         changed = super().sync_tracks(other, dry_run=dry_run)
-        changed |= self.sync(
-            orig_tracks, other.tracks, self.library.map_tracks, dry_run=dry_run
-        )
+        changed |= self.sync(orig_tracks, other.tracks, self.library.map_tracks, dry_run=dry_run)
         if not dry_run and changed:
             self.update_summary()
         return changed
@@ -173,9 +165,7 @@ class PlexFilterSmartPlaylist(PlexSmartPlaylist):
         )
 
 
-class PlexExternalSmartPlaylist(
-    PlexSmartPlaylist, AddsToPlexPlaylist, model.TracksSyncer
-):
+class PlexExternalSmartPlaylist(PlexSmartPlaylist, AddsToPlexPlaylist, model.TracksSyncer):
     def __init__(
         self,
         plex_playlist: playlist.Playlist,
@@ -185,9 +175,7 @@ class PlexExternalSmartPlaylist(
         super().__init__(plex_playlist, smart_criteria, plex_lib)
 
     def sync_tracks(self, other: model.NamedPlaylist, /, dry_run=False) -> bool:
-        return self.sync(
-            self.tracks, other.tracks, self.library.map_tracks, dry_run=dry_run
-        )
+        return self.sync(self.tracks, other.tracks, self.library.map_tracks, dry_run=dry_run)
 
 
 class PlexLibrary(model.Library):
@@ -216,19 +204,14 @@ class PlexLibrary(model.Library):
                 decoded_bytes = base64.decodebytes(codecs.encode(b64_data))
                 # The decoded bytes represent the JSON of a smart criteria
                 smart_json = json.loads(decoded_bytes)
-                result[pl.title] = PlexExternalSmartPlaylist(
-                    pl, smart_json["smart_criteria"], self
-                )
+                result[pl.title] = PlexExternalSmartPlaylist(pl, smart_json["smart_criteria"], self)
             elif FOLDER_METADATA_HEADER in summary:
                 # Decode the base64-encoded metadata following the header.
                 _, b64_data = summary.split(FOLDER_METADATA_HEADER, 1)
                 decoded_bytes = base64.decodebytes(codecs.encode(b64_data))
                 # The decoded bytes represent the JSON of a playlist folder
                 folder_json = json.loads(decoded_bytes)
-                named_subs = [
-                    model.NamedPlaylist(name, self)
-                    for name in folder_json["sub_playlists"]
-                ]
+                named_subs = [model.NamedPlaylist(name, self) for name in folder_json["sub_playlists"]]
                 new_playlist = PlexPlaylistFolder(pl, named_subs, self)
                 folders.append(new_playlist)
                 result[pl.title] = new_playlist
@@ -316,12 +299,7 @@ class PlexLibrary(model.Library):
 
     @staticmethod
     def _make_filter(elements: dict[str, Iterable[str]]) -> dict[str, Any]:
-        return {
-            "and": [
-                {"or": [{key: element} for element in values if element]}
-                for key, values in elements.items()
-            ]
-        }
+        return {"and": [{"or": [{key: element} for element in values if element]} for key, values in elements.items()]}
 
     def _find_tightest_match(self, to_find: model.Track) -> list[audio.Track]:
         tightest_match = []
@@ -374,8 +352,7 @@ class PlexLibrary(model.Library):
                         [
                             "title=",
                         ],
-                        lambda track: track.album().artist().title
-                        == to_find.album_artist,
+                        lambda track: track.album().artist().title == to_find.album_artist,
                     ),
                 ]
                 for fields, fn in combos:
@@ -393,16 +370,8 @@ class PlexLibrary(model.Library):
                         tracks = [
                             track
                             for track in self.music.searchTracks(filters=query)
-                            if (
-                                track.parentIndex == to_find.disc_number
-                                or not to_find.disc_number
-                            )
-                            and (
-                                not to_find.filepath
-                                or normalized_endswith(
-                                    track.locations[0], str(to_find.filepath)
-                                )
-                            )
+                            if (track.parentIndex == to_find.disc_number or not to_find.disc_number)
+                            and (not to_find.filepath or normalized_endswith(track.locations[0], str(to_find.filepath)))
                         ]
                         log.debug("resulting tracks", tracks=tracks)
                     except PlexApiException as e:
@@ -415,23 +384,17 @@ class PlexLibrary(model.Library):
                             return tracks
                         if tightest_match:
                             if len(tracks) < len(tightest_match):
-                                log.debug(
-                                    f"new tighest match", tracks=tracks, query=query
-                                )
+                                log.debug(f"new tightest match", tracks=tracks, query=query)
                                 tightest_match = tracks
                         else:
-                            log.debug(
-                                f"initial tightest match", tracks=tracks, query=query
-                            )
+                            log.debug(f"initial tightest match", tracks=tracks, query=query)
                             tightest_match = tracks
         return tightest_match
 
     def find_track(self, to_find: model.Track) -> list[model.Track]:
         return [PlexTrack(track, self) for track in self._find_tightest_match(to_find)]
 
-    def map_tracks(
-        self, tracks: Iterable[model.Track], /, dry_run: bool = False
-    ) -> Iterator[model.Track]:
+    def map_tracks(self, tracks: Iterable[model.Track], /, dry_run: bool = False) -> Iterator[model.Track]:
         errors = []
         size = 0
         for track in tracks:
@@ -481,9 +444,7 @@ class PlexLibrary(model.Library):
             self.playlists.append(new_playlist)
 
     @multimethod
-    def _make_playlist(
-        self, _: model.Playlist, name: str, tracks: Generator
-    ) -> PlexPlaylist:
+    def _make_playlist(self, _: model.Playlist, name: str, tracks: Generator) -> PlexPlaylist:
         return self.music.createPlaylist(name, [tr.plex_track for tr in tracks])
 
     @multimethod
@@ -510,19 +471,13 @@ class PlexLibrary(model.Library):
             new_playlist = self.music.createPlaylist(name, smart=True, **plex_filters)
             result = PlexFilterSmartPlaylist(new_playlist, self)
         else:
-            new_playlist = self.music.createPlaylist(
-                name, [tr.plex_track for tr in tracks]
-            )
-            result = PlexExternalSmartPlaylist(
-                new_playlist, source.smart_criteria, self
-            )
+            new_playlist = self.music.createPlaylist(name, [tr.plex_track for tr in tracks])
+            result = PlexExternalSmartPlaylist(new_playlist, source.smart_criteria, self)
         result.update_summary()
         return result
 
 
-def load_library_by_username(
-    username, password, code, server, music_root, section="Music"
-) -> PlexLibrary:
+def load_library_by_username(username, password, code, server, music_root, section="Music") -> PlexLibrary:
     account = MyPlexAccount(username, password, code=code)
     plex = account.resource(server).connect()
     return load_library(music_root, plex=plex, section=section)
