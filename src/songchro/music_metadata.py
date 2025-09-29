@@ -5,7 +5,13 @@ from typing import Any
 
 import mutagen
 from multimethod import multimethod
-from mutagen import mp4, mp3
+from mutagen import mp4, mp3, MutagenError
+
+from songchro.model import SongchroException
+
+
+class MetadataError(SongchroException):
+    pass
 
 
 class TrackMetadata:
@@ -189,5 +195,8 @@ def metadata_wrapper(fpath: Path, metadata: mp3.MP3) -> TrackMetadata:
 
 
 def for_file(fpath: Path, music_root: str):
-    metadata = mutagen.File(fpath)
+    try:
+        metadata = mutagen.File(fpath)
+    except MutagenError as e:
+        raise MetadataError from e
     return metadata_wrapper(Path(os.path.relpath(fpath, start=music_root)), metadata)

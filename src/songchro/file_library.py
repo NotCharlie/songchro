@@ -8,7 +8,7 @@ from typing import Protocol, Any
 
 import structlog
 from multimethod import multimethod
-from simpleeval import SimpleEval
+from simpleeval import SimpleEval, InvalidExpression
 
 from songchro import music_metadata
 from songchro.model import (
@@ -22,6 +22,7 @@ from songchro.model import (
     SongchroException,
     NoSuchTrack,
 )
+from songchro.music_metadata import MetadataError
 
 log = structlog.get_logger()
 
@@ -174,7 +175,7 @@ class FileSmartPlaylist(SmartPlaylist, FilePlaylistPersistence):
                     f'preparsed: {self.smart_criteria[self.criteria_key]["filter"]}',
                     parsed,
                 )
-            except Exception as e:
+            except InvalidExpression as e:
                 log.warning(
                     "failed to evaluate filter",
                     e=e,
@@ -354,8 +355,8 @@ class FileLibrary(Library):
                 if existing_track := self.track_for_path.get(relpath):
                     new_meta.playcounts = existing_track.playcounts.copy()
                 self.track_for_path[relpath] = new_meta
-            except Exception as e:
-                log.warning("error on import track", fpath=fpath, error=e)
+            except MetadataError as e:
+                log.warning("error on metadata update", fpath=fpath, error=e)
         self.save_tracks()
 
     def save_tracks(self):

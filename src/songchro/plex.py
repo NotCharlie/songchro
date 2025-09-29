@@ -12,7 +12,7 @@ from typing import Any, Protocol
 import structlog
 from multimethod import multimethod
 from plexapi import playlist, audio
-from plexapi.exceptions import NotFound
+from plexapi.exceptions import NotFound, PlexApiException
 from plexapi.library import MusicSection
 from plexapi.myplex import MyPlexAccount
 from plexapi.server import PlexServer
@@ -400,12 +400,12 @@ class PlexLibrary(model.Library):
                             and (
                                 not to_find.filepath
                                 or normalized_endswith(
-                                    track.locations[0], to_find.filepath
+                                    track.locations[0], str(to_find.filepath)
                                 )
                             )
                         ]
                         log.debug("resulting tracks", tracks=tracks)
-                    except Exception as e:
+                    except PlexApiException as e:
                         log.warning("exception during search()", fields=fields, e=e)
                     if fn:
                         tracks = list(filter(fn, tracks))
