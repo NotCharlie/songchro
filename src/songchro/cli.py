@@ -314,10 +314,7 @@ def sync(
     libs: dict[str, model.Library] = {}
     if source_type == it.LIBRARY_TYPE or destination_type == it.LIBRARY_TYPE:
         itunes_config = ctx.obj["config"].get(it.LIBRARY_TYPE, {})
-        libs[it.LIBRARY_TYPE] = it.load_library(
-            os.path.expanduser(itunes_config.get("xml")),
-            os.path.expanduser(itunes_config.get("music_root")),
-        )
+        libs[it.LIBRARY_TYPE] = _load_itunes_from_config(itunes_config)
     if source_type == pl.LIBRARY_TYPE or destination_type == pl.LIBRARY_TYPE:
         plex_config = ctx.obj["config"].get(pl.LIBRARY_TYPE, {})
         libs[pl.LIBRARY_TYPE] = _load_plex_from_config(plex_config, code)
@@ -348,6 +345,48 @@ def sync_plays(ctx, code, dry_run, skip_increase):
         dry_run=dry_run,
         skip_increase=skip_increase,
     )
+
+
+@cli.command()
+@click.option(
+    "--source-type",
+    "--from",
+    type=click.Choice([it.LIBRARY_TYPE, pl.LIBRARY_TYPE, fl.LIBRARY_TYPE]),
+    default=fl.LIBRARY_TYPE,
+    help=f"Source playlist type (default: {fl.LIBRARY_TYPE})",
+)
+@click.option(
+    "--destination-type",
+    "--to",
+    type=click.Choice([it.LIBRARY_TYPE, pl.LIBRARY_TYPE, fl.LIBRARY_TYPE]),
+    default=pl.LIBRARY_TYPE,
+    help=f"Destination playlist type (default: {pl.LIBRARY_TYPE})",
+)
+@click.option("--code", "-c", type=str, help="OTP code for Plex account.")
+@click.pass_context
+def map_tracks(
+    ctx,
+    source_type: str,
+    destination_type: str,
+    code: str,
+):
+    libs: dict[str, model.Library] = {}
+    if source_type == it.LIBRARY_TYPE or destination_type == it.LIBRARY_TYPE:
+        itunes_config = ctx.obj["config"].get(it.LIBRARY_TYPE, {})
+        libs[it.LIBRARY_TYPE] = _load_itunes_from_config(itunes_config)
+    if source_type == pl.LIBRARY_TYPE or destination_type == pl.LIBRARY_TYPE:
+        plex_config = ctx.obj["config"].get(pl.LIBRARY_TYPE, {})
+        libs[pl.LIBRARY_TYPE] = _load_plex_from_config(plex_config, code)
+    if source_type == fl.LIBRARY_TYPE or destination_type == fl.LIBRARY_TYPE:
+        libs[fl.LIBRARY_TYPE] = ctx.obj["file_library"]
+
+    src = libs[source_type]
+    dest = libs[destination_type]
+    click.echo(f"mapping tracks from {src} to {dest}")
+
+    result = list(dest.map_tracks(src.tracks, dry_run=True))
+
+    click.echo(f"resulting {len(result)} tracks, {len(set(result))} unique")
 
 
 if __name__ == "__main__":

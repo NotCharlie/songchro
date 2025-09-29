@@ -3,7 +3,7 @@ import plistlib
 import unicodedata
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Self, Iterable
+from typing import Any, Self, Iterable, Iterator
 from urllib.parse import urlparse, unquote
 
 import structlog
@@ -15,6 +15,7 @@ from songchro.model import (
     SmartPlaylist,
     PlaylistFolder,
     NamedPlaylist,
+    NoSuchTrack,
 )
 
 LIBRARY_TYPE = "itunes"
@@ -114,9 +115,14 @@ class ItunesLibrary(Library):
         self,
         music_root: Path,
         itunes_library: dict[str, Any],
+        xml_path: str,
     ):
         super().__init__("iTunes", LIBRARY_TYPE, music_root)
         self.itunes_library = itunes_library
+        self.xml_path = xml_path
+
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__}: {self.xml_path}"
 
     @cached_property
     def track_for_id(self) -> dict[str, ItunesTrack]:
@@ -136,6 +142,20 @@ class ItunesLibrary(Library):
 
     def _find_track_for_path(self, fpath: str) -> ItunesTrack:
         return self.track_for_path.get(unicodedata.normalize("NFC", fpath))
+
+    def map_tracks(
+        self, tracks: Iterable[Track], /, dry_run: bool = False
+    ) -> Iterator[Track]:
+        for track in tracks:
+            if track.filepath:
+                yield self._find_track_for_path(str(track.filepath))
+            else:
+                if dry_run:
+                    log.warning(
+                        "no track for path", filepath=track.filepath, track=track
+                    )
+                else:
+                    raise NoSuchTrack(track.filepath)
 
     @cached_property
     def tracks(self) -> list[ItunesTrack]:
@@ -206,4 +226,5 @@ def load_library(xml: str, music_root: str) -> ItunesLibrary:
         return ItunesLibrary(
             itunes_library=library,
             music_root=Path(music_root),
+            xml_path=xml,
         )

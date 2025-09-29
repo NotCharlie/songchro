@@ -27,6 +27,16 @@ class NoSuchPlaylist(SongchroException):
     pass
 
 
+class NoSuchTrack(SongchroException):
+    pass
+
+
+class CollectedErrors(SongchroException):
+    def __init__(self, msg: str, errors: list[SongchroException]):
+        super().__init__(msg)
+        self.errors = errors
+
+
 class CanAddItem(Protocol):
     def add_item(self, track: "Track", after: "Track") -> None:
         raise NotImplementedError

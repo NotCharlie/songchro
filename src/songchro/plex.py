@@ -195,6 +195,9 @@ class PlexLibrary(model.Library):
         super().__init__("Plex", LIBRARY_TYPE, music_root)
         self.music = music
 
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__}: {self.music.getWebURL()}"
+
     @cached_property
     def tracks(self) -> list[model.Track]:
         return [PlexTrack(track, self) for track in self.music.searchTracks()]
@@ -438,7 +441,7 @@ class PlexLibrary(model.Library):
                 if dry_run:
                     errors.append(msg)
                 else:
-                    raise RuntimeError(msg)
+                    raise model.NoSuchTrack(msg)
             else:
                 size += 1
                 yield plex_track[0]
@@ -446,7 +449,7 @@ class PlexLibrary(model.Library):
         if errors:
             for index, error in enumerate(errors):
                 log.error(f"  {index+1}. {error}")
-            raise RuntimeError(f"Found {len(errors)} errors")
+            raise model.CollectedErrors("missing tracks", errors)
 
     def create_playlist(
         self,

@@ -20,6 +20,7 @@ from songchro.model import (
     NamedPlaylist,
     HasJsonDataEncoder,
     SongchroException,
+    NoSuchTrack,
 )
 
 log = structlog.get_logger()
@@ -270,13 +271,25 @@ class FileLibrary(Library):
     def _find_track_for_path(self, fpath: str) -> FileTrack:
         return self.track_for_path.get(unicodedata.normalize("NFC", fpath))
 
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__}: {self.tracks_file}"
+
     def find_track(self, track: Track) -> list[Track]:
         return [self._find_track_for_path(track.filepath)]
 
     def map_tracks(
         self, tracks: Iterable[Track], /, dry_run: bool = False
     ) -> Iterator[Track]:
-        return (Track(**track.json_data()) for track in tracks)
+        for track in tracks:
+            if track.filepath:
+                yield self._find_track_for_path(str(track.filepath))
+            else:
+                if dry_run:
+                    log.warning(
+                        "no track for path", filepath=track.filepath, track=track
+                    )
+                else:
+                    raise NoSuchTrack(track.filepath)
 
     def create_playlist(
         self,
