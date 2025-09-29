@@ -85,14 +85,17 @@ def sync_plays(
                 lib_track[libname] = lib_tracks[0]
                 lib_count = lib_tracks[0].playcounts.get(libname, 0)
                 dest_count = track.playcounts.get(libname, 0)
-                delta = lib_count - dest_count
+                delta = max(lib_count - dest_count, 0)
                 for others in all_keys - {libname}:
                     increase_for[others] += delta
             else:
                 log.debug(
                     "no matching track for playcount", libname=libname, track=track
                 )
-        updates[track] = (lib_track, increase_for)
+        if sum(increase_for.values()):
+            updates[track] = (lib_track, increase_for)
+        else:
+            log.debug("no increases to playcount", track=track)
 
     for track, (lib_track, increase_for) in updates.items():
         log.info("increments for track", track=track, increase_for=increase_for)
