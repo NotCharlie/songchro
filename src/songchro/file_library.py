@@ -73,10 +73,9 @@ class FileTrack(Track):
         self.metadata = metadata
 
     @classmethod
-    def from_file(
-        cls, fpath: Path, library: Library, /, music_root: str | None = None
-    ) -> "FileTrack":
-        metadata = music_metadata.for_file(fpath, music_root)
+    def from_file(cls, fpath: Path, library: Library, /, music_root: str | None = None) -> "FileTrack":
+        relpath = library.standardize_path(fpath, music_root)
+        metadata = music_metadata.for_file(relpath, music_root)
         return FileTrack(
             name=metadata.title,
             artist=metadata.artist,
@@ -84,18 +83,14 @@ class FileTrack(Track):
             album_artist=metadata.album_artist,
             disc_number=metadata.disc_number,
             track_number=metadata.track_number,
-            filepath=os.path.relpath(
-                fpath, start=music_root if music_root else library.music_root
-            ),
+            filepath=relpath,
             playcounts={},
             metadata=metadata,
             library=library,
         )
 
     @classmethod
-    def from_dict(
-        cls, json_dct: dict, library: Library, /, music_root: str | None = None
-    ) -> "FileTrack":
+    def from_dict(cls, json_dct: dict, library: Library, /, music_root: str | None = None) -> "FileTrack":
         return FileTrack(**json_dct, library=library)
 
     def json_data(self) -> dict[str, Any]:
@@ -219,10 +214,7 @@ class FileLibrary(Library):
                 if "sub_playlists" in to_import:
                     new_playlist = FilePlaylistFolder(
                         to_import["name"],
-                        [
-                            NamedPlaylist(name, self)
-                            for name in to_import["sub_playlists"]
-                        ],
+                        [NamedPlaylist(name, self) for name in to_import["sub_playlists"]],
                         Path(filename),
                         self,
                     )
@@ -252,14 +244,10 @@ class FileLibrary(Library):
                         else:
                             raise InvalidTrack(track)
                         pl_tracks.append(self._find_track_for_path(filepath))
-                    new_playlist = FilePlaylist(
-                        to_import["name"], Path(filename), self, tracks=pl_tracks
-                    )
+                    new_playlist = FilePlaylist(to_import["name"], Path(filename), self, tracks=pl_tracks)
                 playlists[to_import["name"]] = new_playlist
         for playlist_folder in playlist_folders:
-            playlist_folder.sub_playlists = [
-                playlists[playlist.name] for playlist in playlist_folder.sub_playlists
-            ]
+            playlist_folder.sub_playlists = [playlists[playlist.name] for playlist in playlist_folder.sub_playlists]
         super().__init__(
             "File",
             LIBRARY_TYPE,
@@ -278,17 +266,13 @@ class FileLibrary(Library):
     def find_track(self, track: Track) -> list[Track]:
         return [self._find_track_for_path(track.filepath)]
 
-    def map_tracks(
-        self, tracks: Iterable[Track], /, dry_run: bool = False
-    ) -> Iterator[Track]:
+    def map_tracks(self, tracks: Iterable[Track], /, dry_run: bool = False) -> Iterator[Track]:
         for track in tracks:
             if track.filepath:
                 yield self._find_track_for_path(str(track.filepath))
             else:
                 if dry_run:
-                    log.warning(
-                        "no track for path", filepath=track.filepath, track=track
-                    )
+                    log.warning("no track for path", filepath=track.filepath, track=track)
                 else:
                     raise NoSuchTrack(track.filepath)
 
@@ -311,22 +295,16 @@ class FileLibrary(Library):
             )
 
     @multimethod
-    def _make_playlist(
-        self, _: Playlist, name: str, tracks: Generator, filename: str
-    ) -> FilePlaylist:
+    def _make_playlist(self, _: Playlist, name: str, tracks: Generator, filename: str) -> FilePlaylist:
         return FilePlaylist(name, Path(filename), self, tracks=list(tracks))
 
     @multimethod
-    def _make_playlist(
-        self, source: PlaylistFolder, name: str, tracks: Generator, filename: str
-    ) -> FilePlaylistFolder:
+    def _make_playlist(self, source: PlaylistFolder, name: str, tracks: Generator, filename: str) -> FilePlaylistFolder:
         subs = [self.find_playlist(p.name) for p in source.sub_playlists]
         return FilePlaylistFolder(name, subs, Path(filename), self)
 
     @multimethod
-    def _make_playlist(
-        self, source: SmartPlaylist, name: str, tracks: Generator, filename: str
-    ) -> FileSmartPlaylist:
+    def _make_playlist(self, source: SmartPlaylist, name: str, tracks: Generator, filename: str) -> FileSmartPlaylist:
         if LIBRARY_TYPE in source.smart_criteria:
             return FileSmartPlaylist(
                 name,
@@ -344,14 +322,10 @@ class FileLibrary(Library):
 
     def update_metadata(self, subdir=""):
         for fpath in mp3_m4a_files(os.path.join(self.music_root, subdir)):
-            relpath = unicodedata.normalize(
-                "NFC", os.path.relpath(fpath, start=self.music_root)
-            )
+            relpath = unicodedata.normalize("NFC", self.standardize_path(fpath))
             log.debug("read file", fpath=fpath)
             try:
-                new_meta = FileTrack.from_file(
-                    fpath, self, music_root=str(self.music_root)
-                )
+                new_meta = FileTrack.from_file(fpath, self, music_root=str(self.music_root))
                 if existing_track := self.track_for_path.get(relpath):
                     new_meta.playcounts = existing_track.playcounts.copy()
                 self.track_for_path[relpath] = new_meta
@@ -361,9 +335,7 @@ class FileLibrary(Library):
 
     def save_tracks(self):
         with open(self.tracks_file, "w", encoding="utf-8") as f:
-            json.dump(
-                self.track_for_path, f, cls=HasJsonDataEncoder, indent=2, sort_keys=True
-            )
+            json.dump(self.track_for_path, f, cls=HasJsonDataEncoder, indent=2, sort_keys=True)
 
     @multimethod
     def migrate_playlist(self, playlist: FilePlaylist):
@@ -403,5 +375,9 @@ def mp3_m4a_files(root_dir: str | os.PathLike) -> Iterator[Path]:
                 yield Path(dirpath) / name
 
 
-def load_library(tracks_file: str, playlist_root: str, music_root: str) -> FileLibrary:
-    return FileLibrary(tracks_file, playlist_root, music_root)
+def load_library(file_config: dict[str, Any]) -> FileLibrary:
+    return FileLibrary(
+        os.path.expanduser(file_config.get("tracks")),
+        os.path.expanduser(file_config.get("root")),
+        os.path.expanduser(file_config.get("music_root")),
+    )

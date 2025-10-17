@@ -24,14 +24,12 @@ log = structlog.get_logger()
 
 
 class ItunesTrack(Track):
-    def __init__(
-        self, track: dict[str, Any], music_root: str, library: "ItunesLibrary"
-    ):
+    def __init__(self, track: dict[str, Any], music_root: str, library: "ItunesLibrary"):
         self.itunes_track = track
         location = track.get("Location", None)
         parsed = urlparse(location)
         path = unquote(parsed.path) if parsed.path else None
-        filepath = Path(os.path.relpath(path, start=music_root)) if path else None
+        filepath = Path(library.standardize_path(path, music_root)) if path else None
 
         super().__init__(
             name=track["Name"],
@@ -135,25 +133,18 @@ class ItunesLibrary(Library):
 
     @cached_property
     def track_for_path(self) -> dict[str, ItunesTrack]:
-        return {
-            unicodedata.normalize("NFC", str(track.filepath)): track
-            for track in self.track_for_id.values()
-        }
+        return {unicodedata.normalize("NFC", str(track.filepath)): track for track in self.track_for_id.values()}
 
     def _find_track_for_path(self, fpath: str) -> ItunesTrack:
         return self.track_for_path.get(unicodedata.normalize("NFC", fpath))
 
-    def map_tracks(
-        self, tracks: Iterable[Track], /, dry_run: bool = False
-    ) -> Iterator[Track]:
+    def map_tracks(self, tracks: Iterable[Track], /, dry_run: bool = False) -> Iterator[Track]:
         for track in tracks:
             if track.filepath:
                 yield self._find_track_for_path(str(track.filepath))
             else:
                 if dry_run:
-                    log.warning(
-                        "no track for path", filepath=track.filepath, track=track
-                    )
+                    log.warning("no track for path", filepath=track.filepath, track=track)
                 else:
                     raise NoSuchTrack(track.filepath)
 
@@ -163,9 +154,7 @@ class ItunesLibrary(Library):
 
     @cached_property
     def playlists(self) -> list[NamedPlaylist]:
-        result: dict[
-            str, ItunesPlaylist | ItunesSmartPlaylist | ItunesPlaylistFolder
-        ] = {}
+        result: dict[str, ItunesPlaylist | ItunesSmartPlaylist | ItunesPlaylistFolder] = {}
         for playlist in self.itunes_library["Playlists"]:
             if not playlist.get("Visible", True):
                 continue
@@ -203,14 +192,10 @@ class ItunesLibrary(Library):
 
         # Update sub_playlists
         for key, playlist in result.items():
-            parent_id: str | None = playlist.itunes_playlist.get(
-                "Parent Persistent ID", None
-            )
+            parent_id: str | None = playlist.itunes_playlist.get("Parent Persistent ID", None)
             if parent_id:
                 parent_playlist = result[parent_id]
-                assert (
-                    type(parent_playlist) is ItunesPlaylistFolder
-                ), f"{parent_id} is not an ItunesPlaylistFolder"
+                assert type(parent_playlist) is ItunesPlaylistFolder, f"{parent_id} is not an ItunesPlaylistFolder"
                 parent_playlist.sub_playlists.append(playlist)
         return list(result.values())
 
@@ -219,8 +204,11 @@ class ItunesLibrary(Library):
         return [track] if track else []
 
 
-def load_library(xml: str, music_root: str) -> ItunesLibrary:
+def load_library(itunes_config) -> ItunesLibrary:
     """Load an iTunes library."""
+    xml = os.path.expanduser(itunes_config.get("xml"))
+    music_root = os.path.expanduser(itunes_config.get("music_root"))
+
     with open(xml, "rb") as f:
         library = plistlib.load(f)
         return ItunesLibrary(

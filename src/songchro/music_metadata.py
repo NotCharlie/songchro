@@ -194,9 +194,9 @@ def metadata_wrapper(fpath: Path, metadata: mp3.MP3) -> TrackMetadata:
     return Mp3TrackMetadata(fpath, metadata)
 
 
-def for_file(fpath: Path, music_root: str):
+def for_file(relpath: str, music_root: str):
     try:
-        metadata = mutagen.File(fpath)
+        metadata = mutagen.File(os.path.join(music_root, relpath))
     except MutagenError as e:
         raise MetadataError from e
-    return metadata_wrapper(Path(os.path.relpath(fpath, start=music_root)), metadata)
+    return metadata_wrapper(Path(relpath), metadata)

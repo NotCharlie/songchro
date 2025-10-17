@@ -1,7 +1,6 @@
 import base64
 import codecs
 import json
-import os.path
 import re
 import unicodedata
 from collections.abc import Iterable, Iterator, Generator
@@ -48,7 +47,7 @@ class PlexTrack(model.Track):
             name=plex_track.title,
             artist=plex_track.artist().title,
             album=plex_track.album().title,
-            filepath=Path(os.path.relpath(plex_track.locations[0], start=library.music_root)),
+            filepath=Path(library.standardize_path(plex_track.locations[0])),
             album_artist=plex_track.album().artist().title,
             disc_number=plex_track.parentIndex,
             track_number=plex_track.index,
@@ -477,17 +476,34 @@ class PlexLibrary(model.Library):
         return result
 
 
-def load_library_by_username(username, password, code, server, music_root, section="Music") -> PlexLibrary:
+def _load_library_by_username(username, password, code, server, music_root, section="Music") -> PlexLibrary:
     account = MyPlexAccount(username, password, code=code)
     plex = account.resource(server).connect()
-    return load_library(music_root, plex=plex, section=section)
+    return _load_library_by_server(music_root, plex=plex, section=section)
 
 
-def load_library_by_baseurl(baseurl, token, music_root, section="Music") -> PlexLibrary:
+def _load_library_by_baseurl(baseurl, token, music_root, section="Music") -> PlexLibrary:
     plex = PlexServer(baseurl, token)
-    return load_library(music_root, plex=plex, section=section)
+    return _load_library_by_server(music_root, plex=plex, section=section)
 
 
-def load_library(music_root, plex: PlexServer = None, section="Music") -> PlexLibrary:
+def _load_library_by_server(music_root, plex: PlexServer = None, section="Music") -> PlexLibrary:
     plex = plex if plex else PlexServer()
     return PlexLibrary(music_root=Path(music_root), music=plex.library.section(section))
+
+
+def load_library(plex_config: dict[str, Any]) -> PlexLibrary:
+    plex_music_root = plex_config.get("music_root")
+    section = plex_config.get("section")
+
+    username = plex_config.get("username")
+    password = plex_config.get("password")
+    server = plex_config.get("server")
+    baseurl = plex_config.get("baseurl")
+    token = plex_config.get("token")
+    code = plex_config.get("code")
+    if username and password and server:
+        return _load_library_by_username(username, password, code, server, plex_music_root, section=section)
+    elif baseurl and token:
+        return _load_library_by_baseurl(baseurl, token, plex_music_root, section=section)
+    return _load_library_by_server(plex_music_root, section=section)

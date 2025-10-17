@@ -17,6 +17,7 @@ dependencies = [
     "mutagen (>=1.47.0,<2.0.0)",
     "multimethod (>=2.0,<3.0)",
     "simpleeval (>=1.0,<2.0)",
+    "py-applescript (>=1.0.3,<2.0.0)",
 ]
 packages = [
     { include = "songchro", from = "src" },

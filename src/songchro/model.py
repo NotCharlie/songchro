@@ -1,4 +1,5 @@
 import itertools
+import os
 import unicodedata
 from collections.abc import Iterable, Callable, Iterator
 from dataclasses import dataclass
@@ -158,9 +159,7 @@ class NamedPlaylist:
 
     @property
     def tracks(self) -> Iterable[Track]:
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not contain tracks directly"
-        )
+        raise NotImplementedError(f"{self.__class__.__name__} does not contain tracks directly")
 
     def sync_tracks(self, other: "NamedPlaylist", /, dry_run=False) -> bool:
         raise InvalidSyncError(self.__class__, other.__class__)
@@ -189,9 +188,7 @@ class Playlist(NamedPlaylist, TracksSyncer):
         return self._tracks
 
     def sync_tracks(self, other: NamedPlaylist, /, dry_run=False) -> bool:
-        return self.sync(
-            self.tracks, other.tracks, self.library.map_tracks, dry_run=dry_run
-        )
+        return self.sync(self.tracks, other.tracks, self.library.map_tracks, dry_run=dry_run)
 
     def add_item(self, track: Track, after: Track):
         if after:
@@ -201,15 +198,11 @@ class Playlist(NamedPlaylist, TracksSyncer):
             self._tracks.append(track)
 
     def __str__(self):
-        return (
-            f"{self.__class__.__name__} '{self.name}' ({len(list(self.tracks))} tracks)"
-        )
+        return f"{self.__class__.__name__} '{self.name}' ({len(list(self.tracks))} tracks)"
 
 
 class PlaylistFolder(NamedPlaylist):
-    def __init__(
-        self, name: str, sub_playlists: list[NamedPlaylist], library: "Library"
-    ):
+    def __init__(self, name: str, sub_playlists: list[NamedPlaylist], library: "Library"):
         super().__init__(name, library)
         self.sub_playlists = sub_playlists
 
@@ -237,9 +230,7 @@ class PlaylistFolder(NamedPlaylist):
         orig_len = len(self.sub_playlists)
         sub_playlists = {p.name for p in self.sub_playlists}
         sub_playlists.update({o.name for o in other.sub_playlists})
-        self.sub_playlists = [
-            self.library.find_playlist(name) for name in sub_playlists
-        ]
+        self.sub_playlists = [self.library.find_playlist(name) for name in sub_playlists]
         return orig_len != len(self.sub_playlists)
 
 
@@ -314,12 +305,13 @@ class Library:
         }
         return data
 
+    def standardize_path(self, fpath: Path | str, music_root: Path | str = None) -> str:
+        return os.path.relpath(str(fpath), start=str(music_root if music_root else self.music_root))
+
     def find_track(self, track: Track) -> list[Track]:
         raise NotImplementedError()
 
-    def map_tracks(
-        self, tracks: Iterable[Track], /, dry_run: bool = False
-    ) -> Iterator[Track]:
+    def map_tracks(self, tracks: Iterable[Track], /, dry_run: bool = False) -> Iterator[Track]:
         raise NotImplementedError()
 
     def create_playlist(
