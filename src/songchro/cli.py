@@ -5,6 +5,7 @@ CLI interface for songchro using Click.
 import json
 import logging
 import os
+import sys
 from pathlib import Path
 
 import click
@@ -34,7 +35,7 @@ CLASS_FOR_KIND = {
 @click.option(
     "--config",
     "config_file",
-    type=click.Path(exists=True, dir_okay=False),
+    type=click.Path(dir_okay=False),
     default=os.path.expanduser("~/.config/songchro/config.yml"),
     help="Configuration file.",
 )
@@ -42,8 +43,12 @@ CLASS_FOR_KIND = {
 def cli(ctx, logging_level: str, config_file: str):
     """Synchronize playlists between iTunes and Plex."""
     ctx.ensure_object(dict)
-    with open(os.path.expanduser(config_file), "r") as f:
-        ctx.obj["config"] = config = yaml.safe_load(f)
+
+    if os.path.exists(config_file):
+        with open(config_file, "r") as f:
+            ctx.obj["config"] = config = yaml.safe_load(f) or {}
+    else:
+        ctx.obj["config"] = config = {}
 
     structlog.configure(
         wrapper_class=structlog.make_filtering_bound_logger(
@@ -52,7 +57,8 @@ def cli(ctx, logging_level: str, config_file: str):
     )
 
     file_config = config.get("file", {})
-    ctx.obj["file_library"] = fl.load_library(file_config)
+    if file_config:
+        ctx.obj["file_library"] = fl.load_library(file_config)
 
 
 @cli.group()
@@ -389,6 +395,17 @@ def map_tracks(
     result = list(dest.map_tracks(src.tracks, dry_run=True))
 
     click.echo(f"resulting {len(result)} tracks, {len(set(result))} unique")
+
+
+@cli.command()
+@click.option("--shell", "-s", type=click.Choice(["bash", "fish", "zsh"]), required=True, help="Shell to generate completion script for.")
+@click.pass_context
+def completion(ctx, shell: str):
+    """Generate shell completion script."""
+    from click.shell_completion import get_completion_class
+    comp_class = get_completion_class(shell)
+    comp = comp_class(cli, {}, "songchro", "_songchro_COMPLETE")
+    click.echo(comp.source())
 
 
 if __name__ == "__main__":
