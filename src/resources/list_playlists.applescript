@@ -20,7 +20,7 @@ end mapPlaylists
 on listPlaylists()
   tell application "Music"
     local allPlaylists
-    set allPlaylists to every user playlist whose special kind is none and smart is False
+    set allPlaylists to every user playlist whose special kind is none and smart is false
   end tell
   return mapPlaylists(allPlaylists)
 end listPlaylists
@@ -36,7 +36,7 @@ end listFolderPlaylists
 on listSmartPlaylists()
   tell application "Music"
     local allPlaylists
-    set allPlaylists to every user playlist whose special kind is none and smart is True
+    set allPlaylists to every user playlist whose special kind is none and smart is true
   end tell
   return mapPlaylists(allPlaylists)
 end listSmartPlaylists

@@ -5,7 +5,18 @@ from pathlib import Path
 import importlib.resources
 from typing import Any
 
-import applescript
+try:
+    import applescript
+except ImportError:
+    # macOS-only module; provide stubs for non-macOS environments
+    class _FakeApplescript:  # noqa: N801
+        class ScriptError(Exception):
+            pass
+        def AppleScript(self, **_):  # noqa: N802
+            raise RuntimeError("applescript requires macOS")
+
+    applescript = _FakeApplescript()
+
 import structlog
 
 from songchro.model import Library, NamedPlaylist, Playlist, SmartPlaylist, PlaylistFolder, Track
