@@ -54,9 +54,11 @@ plex:
 
 ## Usage
 
-The `songchro` CLI tool provides commands to work with iTunes, Plex, and local file playlists.
+The `songchro` CLI tool provides commands to work with Apple Music, iTunes, Plex, and local file playlists.
 
-### General Commands
+### General Options
+
+Options that apply to all commands:
 
 ```bash
 # Show help
@@ -86,6 +88,37 @@ songchro file list --songs
 
 # Simplified output for using in pipelines
 songchro file list --simple
+
+# Filter by playlist kind (plain, folder, smart, all)
+songchro file list --kind plain
+
+# Update metadata for playlists in a subdirectory
+songchro file update-meta [subdir]
+
+# Migrate a playlist
+songchro file migrate "My Playlist"
+```
+
+### Apple Music Commands
+
+```bash
+# List Apple Music playlists
+songchro apple list
+
+# Include list of song tracks in each playlist
+songchro apple list --songs
+
+# Simplified output for using in pipelines
+songchro apple list --simple
+
+# Filter by playlist kind (plain, folder, smart, all)
+songchro apple list --kind plain
+
+# Export an Apple Music playlist to the local library
+songchro apple export "My Playlist"
+
+# Export with dry run (no changes)
+songchro apple export "My Playlist" --dry-run
 ```
 
 ### iTunes Commands
@@ -100,16 +133,30 @@ songchro itunes list --songs
 # Simplified output for using in pipelines
 songchro itunes list --simple
 
-# Export an iTunes playlist
+# Filter by playlist kind (plain, folder, smart, all)
+songchro itunes list --kind plain
+
+# Export an iTunes playlist to the local library
 songchro itunes export "My Playlist"
+
+# Export with dry run (no changes)
+songchro itunes export "My Playlist" --dry-run
 
 # Export all iTunes playlists
 songchro itunes export_all
+
+# Export all with dry run (no changes)
+songchro itunes export_all --dry-run
 ```
 
 ### Plex Commands
 
+Plex commands support an OTP code option at the group level:
+
 ```bash
+# Use OTP code for Plex authentication (applies to all plex subcommands)
+songchro plex --code "123456" [COMMAND]
+
 # List Plex playlists
 songchro plex list
 
@@ -119,11 +166,20 @@ songchro plex list --songs
 # Simplified output for using in pipelines
 songchro plex list --simple
 
-# Export a Plex playlist
+# Filter by playlist kind (plain, folder, smart, all)
+songchro plex list --kind plain
+
+# Export a Plex playlist to the local library
 songchro plex export "My Playlist"
+
+# Export with dry run (no changes)
+songchro plex export "My Playlist" --dry-run
 
 # Export all Plex playlists
 songchro plex export_all
+
+# Export all with dry run (no changes)
+songchro plex export_all --dry-run
 
 # Find tracks in Plex
 songchro plex find --song-file "/path/to/song.json"
@@ -133,25 +189,66 @@ songchro plex find --filepath "/path/to/music/file.mp3"
 
 # Import a playlist to Plex
 songchro plex import "My Playlist"
-songchro plex import "My Playlist" --dry-run
 
-# Use OTP code for Plex authentication
-songchro plex --code "123456" [COMMAND]
+# Import with dry run (no changes)
+songchro plex import "My Playlist" --dry-run
 ```
 
-### Sync playlists
+### Sync Playlists
 
 ```bash
-# Synchronize playlists
-songchro sync "My Playlist" 
+# Synchronize playlists (defaults: file -> plex)
+songchro sync "My Playlist"
 
 # Specify source and destination types
 songchro sync "My Playlist" --source-type plex --destination-type file
 songchro sync "My Playlist" --from plex --to file
+
+# Supported types: itunes, plex, file, apple_music
 
 # Dry run (no changes)
 songchro sync "My Playlist" --dry-run
 
 # Use OTP code for Plex authentication
 songchro sync "My Playlist" --code "123456"
+```
+
+### Sync Plays
+
+```bash
+# Synchronize play counts
+songchro sync-plays
+
+# Dry run (no changes)
+songchro sync-plays --dry-run
+
+# Use OTP code for Plex authentication
+songchro sync-plays --code "123456"
+
+# Skip calling increase_plays
+songchro sync-plays --skip-increase
+```
+
+### Map Tracks
+
+```bash
+# Map tracks between platforms
+songchro map-tracks
+
+# Specify source and destination types
+songchro map-tracks --from itunes --to plex
+
+# Supported types: itunes, plex, file, apple_music
+
+# Use OTP code for Plex authentication
+songchro map-tracks --code "123456"
+```
+
+### Shell Completion
+
+```bash
+# Generate shell completion script
+songchro completion --shell bash
+songchro completion --shell zsh
+songchro completion --shell fish
 ```
