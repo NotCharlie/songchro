@@ -404,7 +404,7 @@ def completion(ctx, shell: str):
     """Generate shell completion script."""
     from click.shell_completion import get_completion_class
     comp_class = get_completion_class(shell)
-    comp = comp_class(cli, {}, "songchro", "_songchro_COMPLETE")
+    comp = comp_class(cli, {}, "songchro", "_SONGCHRO_COMPLETE")
     click.echo(comp.source())
 
 
