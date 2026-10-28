@@ -1,0 +1,44 @@
+name: Release to TestPyPI
+
+on:
+  push:
+    branches:
+      - 'test-\d+\.\d+\.\d+'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: builtin:checkout
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v7.1.0
+        with:
+          python-version: '3.13'
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1.4.2
+        with:
+          version: 2.5.1
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Build package
+        run: poetry build
+
+      - name: Configure TestPyPI repository
+        run: poetry config repositories.test-pypi https://test.pypi.org/legacy/
+
+      - name: Publish to TestPyPI
+        env:
+          POETRY_PYPI_TOKEN_TESTPYPI: ${{ secrets.TESTPYPI_TOKEN }}
+        run: poetry publish --repository test-pypi

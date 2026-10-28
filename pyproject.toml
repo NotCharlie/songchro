@@ -24,6 +24,10 @@ packages = [
 ]
 dynamic = ["version"]
 
+[project.urls]
+Homepage = "https://github.com/NotCharlie/songchro"
+Repository = "https://github.com/NotCharlie/songchro"
+
 [dependency-groups]
 test = [
     "pytest (>=8.0.0,<9.0.0)",
