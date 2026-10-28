@@ -2,7 +2,7 @@ name: Release to PyPI
 
 on:
   push:
-    branches:
+    tags:
       - '\d+\.\d+\.\d+'
 
 permissions:

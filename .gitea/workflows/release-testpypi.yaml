@@ -2,7 +2,7 @@ name: Release to TestPyPI
 
 on:
   push:
-    branches:
+    tags:
       - 'test-\d+\.\d+\.\d+'
 
 permissions:
