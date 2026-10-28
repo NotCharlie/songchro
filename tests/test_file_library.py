@@ -246,3 +246,96 @@ class TestLoadLibrary:
         config = {"tracks": tracks_file, "root": playlist_root, "music_root": music_root}
         lib = load_library(config)
         assert lib.source == "File"
+
+
+class TestUpdateMetadata:
+    def test_rejects_path_outside_music_root(self, file_library, music_root, tmp_path):
+        outside = tmp_path / "other"
+        outside.mkdir()
+        with pytest.raises(SystemExit):
+            file_library.update_metadata(str(outside))
+
+    def test_rejects_path_outside_music_root_absolute(self, file_library, music_root, tmp_path):
+        outside = tmp_path.resolve() / "other"
+        outside.mkdir()
+        with pytest.raises(SystemExit):
+            file_library.update_metadata(str(outside))
+
+    def test_accepts_subdir_inside_music_root(self, file_library, music_root, tmp_path):
+        subdir = Path(music_root) / "artist"
+        subdir.mkdir()
+        (subdir / "song.mp3").touch()
+        with patch.object(file_library, "save_tracks"):
+            with patch("songchro.file_library.mp3_m4a_files") as mock_files:
+                mock_files.return_value = [subdir / "song.mp3"]
+                with patch("songchro.file_library.FileTrack.from_file") as mock_from_file:
+                    mock_from_file.return_value = MagicMock()
+                    file_library.update_metadata(str(subdir))
+        mock_files.assert_called_once_with(subdir)
+
+    def test_accepts_music_root_itself(self, file_library, music_root, tmp_path):
+        with patch.object(file_library, "save_tracks"):
+            with patch("songchro.file_library.mp3_m4a_files") as mock_files:
+                mock_files.return_value = []
+                file_library.update_metadata(music_root)
+        music_root_path = Path(music_root).resolve()
+        mock_files.assert_called_once_with(music_root_path)
+
+    def test_updates_tracks_in_dict(self, file_library, music_root, tmp_path):
+        subdir = Path(music_root) / "album"
+        subdir.mkdir()
+        (subdir / "track.mp3").touch()
+        mock_track = MagicMock()
+        with patch("songchro.file_library.mp3_m4a_files") as mock_files:
+            mock_files.return_value = [subdir / "track.mp3"]
+            with patch("songchro.file_library.FileTrack.from_file", return_value=mock_track):
+                with patch.object(file_library, "save_tracks"):
+                    file_library.update_metadata(str(subdir))
+        relpath = file_library.standardize_path(subdir / "track.mp3")
+        assert relpath in file_library.track_for_path
+        assert file_library.track_for_path[relpath] is mock_track
+
+    def test_preserves_playcounts_on_update(self, file_library, music_root, tmp_path):
+        subdir = Path(music_root) / "album"
+        subdir.mkdir()
+        (subdir / "track.mp3").touch()
+        existing_track = MagicMock()
+        existing_track.playcounts = {"2024-01-01": 3}
+        relpath = file_library.standardize_path(subdir / "track.mp3")
+        file_library.track_for_path[relpath] = existing_track
+        new_track = MagicMock()
+        new_track.playcounts = {}
+        with patch("songchro.file_library.mp3_m4a_files") as mock_files:
+            mock_files.return_value = [subdir / "track.mp3"]
+            with patch("songchro.file_library.FileTrack.from_file", return_value=new_track):
+                with patch.object(file_library, "save_tracks"):
+                    file_library.update_metadata(str(subdir))
+        assert file_library.track_for_path[relpath] is new_track
+        assert file_library.track_for_path[relpath].playcounts == {"2024-01-01": 3}
+
+    def test_skips_metadata_errors(self, file_library, music_root, tmp_path):
+        subdir = Path(music_root) / "album"
+        subdir.mkdir()
+        (subdir / "bad.mp3").touch()
+        (subdir / "good.mp3").touch()
+        from songchro.music_metadata import MetadataError
+        mock_bad = MagicMock()
+        mock_good = MagicMock()
+        mock_good.playcounts = {}
+        call_count = 0
+
+        def side_effect(*args, **kwargs):
+            nonlocal call_count
+            if call_count == 0:
+                call_count += 1
+                raise MetadataError("bad file")
+            call_count += 1
+            return mock_good
+
+        with patch("songchro.file_library.mp3_m4a_files") as mock_files:
+            mock_files.return_value = [subdir / "bad.mp3", subdir / "good.mp3"]
+            with patch("songchro.file_library.FileTrack.from_file", side_effect=side_effect):
+                with patch.object(file_library, "save_tracks"):
+                    file_library.update_metadata(str(subdir))
+        good_relpath = file_library.standardize_path(subdir / "good.mp3")
+        assert good_relpath in file_library.track_for_path

@@ -49,6 +49,75 @@ class TestFileCommands:
         result = runner.invoke(cli, ["--config", config_path, "file", "list", "--simple"])
         assert result.exit_code == 0
 
+    def test_update_meta_single_directory(self, runner, config_file):
+        config_path, tmp_path = config_file
+        (tmp_path / "playlists").mkdir()
+        music = tmp_path / "music"
+        music.mkdir()
+        subdir = music / "artist"
+        subdir.mkdir()
+        (subdir / "song.mp3").touch()
+        with patch("songchro.file_library.mp3_m4a_files", return_value=[]):
+            result = runner.invoke(cli, ["--config", config_path, "file", "update-meta", str(subdir)])
+        assert result.exit_code == 0
+
+    def test_update_meta_multiple_directories(self, runner, config_file):
+        config_path, tmp_path = config_file
+        (tmp_path / "playlists").mkdir()
+        music = tmp_path / "music"
+        music.mkdir()
+        d1 = music / "artist1"
+        d1.mkdir()
+        d2 = music / "artist2"
+        d2.mkdir()
+        calls = []
+
+        def capture_mp3_m4a_files(directory):
+            calls.append(directory)
+            return []
+
+        with patch("songchro.file_library.mp3_m4a_files", side_effect=capture_mp3_m4a_files):
+            result = runner.invoke(cli, ["--config", config_path, "file", "update-meta", str(d1), str(d2)])
+        assert result.exit_code == 0
+        assert len(calls) == 2
+
+    def test_update_meta_rejects_directory_outside_music_root(self, runner, config_file):
+        config_path, tmp_path = config_file
+        (tmp_path / "playlists").mkdir()
+        (tmp_path / "music").mkdir()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        result = runner.invoke(cli, ["--config", config_path, "file", "update-meta", str(outside)])
+        assert result.exit_code == 1
+        assert "not under the music root" in result.output
+
+    def test_update_meta_requires_at_least_one_directory(self, runner, config_file):
+        config_path, tmp_path = config_file
+        (tmp_path / "playlists").mkdir()
+        (tmp_path / "music").mkdir()
+        result = runner.invoke(cli, ["--config", config_path, "file", "update-meta"])
+        assert result.exit_code != 0
+
+    def test_update_meta_first_valid_second_invalid(self, runner, config_file):
+        config_path, tmp_path = config_file
+        (tmp_path / "playlists").mkdir()
+        music = tmp_path / "music"
+        music.mkdir()
+        d1 = music / "artist1"
+        d1.mkdir()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        calls = []
+
+        def capture_mp3_m4a_files(directory):
+            calls.append(directory)
+            return []
+
+        with patch("songchro.file_library.mp3_m4a_files", side_effect=capture_mp3_m4a_files):
+            result = runner.invoke(cli, ["--config", config_path, "file", "update-meta", str(d1), str(outside)])
+        assert result.exit_code == 1
+        assert len(calls) == 1
+
 
 class TestSyncCommand:
     @patch("songchro.cli.fl")

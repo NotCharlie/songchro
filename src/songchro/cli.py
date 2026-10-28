@@ -5,7 +5,6 @@ CLI interface for songchro using Click.
 import json
 import logging
 import os
-import sys
 from pathlib import Path
 
 import click
@@ -88,11 +87,12 @@ def file_list(
 
 
 @file.command("update-meta")
-@click.argument("subdir", required=False, default="", type=Path)
+@click.argument("directories", required=True, nargs=-1, type=click.Path(dir_okay=True, file_okay=False))
 @click.pass_context
-def file_update_meta(ctx, subdir):
+def file_update_meta(ctx, directories):
     library: fl.FileLibrary = ctx.obj["file_library"]
-    library.update_metadata(subdir=subdir)
+    for directory in directories:
+        library.update_metadata(directory=directory)
 
 
 @file.command("migrate")

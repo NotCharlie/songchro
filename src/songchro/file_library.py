@@ -1,6 +1,7 @@
 import glob
 import json
 import os
+import sys
 import unicodedata
 from collections.abc import Iterable, Callable, Iterator, Generator
 from pathlib import Path
@@ -320,8 +321,15 @@ class FileLibrary(Library):
                 self,
             )
 
-    def update_metadata(self, subdir=""):
-        for fpath in mp3_m4a_files(os.path.join(self.music_root, subdir)):
+    def update_metadata(self, directory):
+        dirpath = Path(directory).resolve()
+        music_root = Path(self.music_root).resolve()
+        try:
+            dirpath.relative_to(music_root)
+        except ValueError:
+            print(f"Error: {directory!s} is not under the music root {music_root}", file=sys.stderr)
+            sys.exit(1)
+        for fpath in mp3_m4a_files(dirpath):
             relpath = unicodedata.normalize("NFC", self.standardize_path(fpath))
             log.debug("read file", fpath=fpath)
             try:
