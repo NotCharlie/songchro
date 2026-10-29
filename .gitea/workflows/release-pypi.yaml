@@ -45,7 +45,7 @@ jobs:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
 
       - name: Create Gitea release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3.0.3
         with:
           files: dist/*
           body: ${{ steps.changelog.outputs.changelog }}
