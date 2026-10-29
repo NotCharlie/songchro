@@ -1,0 +1,25 @@
+name: Renovate
+
+on:
+  schedule:
+    - cron: '0 1 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  renovate:
+    runs-on: ubuntu-latest
+    container: ghcr.io/renovatebot/renovate:44.192.2
+    steps:
+      - name: Self-hosted Renovate
+        run: renovate
+        env:
+          RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}
+          RENOVATE_GITHUB_COM_TOKEN: ${{ secrets.RENOVATE_GITHUB_COM_TOKEN }}
+          RENOVATE_ENDPOINT: https://gitea.notcharlie.com/api/v1
+          RENOVATE_PLATFORM: gitea
+          RENOVATE_REPOSITORIES: ${{ github.repository }}
+          LOG_LEVEL: "INFO"
