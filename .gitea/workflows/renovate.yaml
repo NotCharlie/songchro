@@ -12,7 +12,7 @@ permissions:
 jobs:
   renovate:
     runs-on: ubuntu-latest
-    container: ghcr.io/renovatebot/renovate:44.198.0
+    container: ghcr.io/renovatebot/renovate:44.198.3
     steps:
       - name: Self-hosted Renovate
         run: renovate
