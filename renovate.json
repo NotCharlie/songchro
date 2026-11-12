@@ -4,5 +4,8 @@
   "enabledManagers": ["poetry", "github-actions"],
   "dependencyDashboard": false,
   "prHourlyLimit": 0,
-  "prConcurrentLimit": 0
+  "prConcurrentLimit": 0,
+  "github-actions": {
+    "automerge": true
+  }
 }
