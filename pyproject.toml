@@ -14,7 +14,7 @@ dependencies = [
     "spotipy (==2.26.0)",
     "structlog (==26.1.0)",
     "pyyaml (==6.0.3)",
-    "mutagen (==1.47.0)",
+    "mutagen (==1.48.1)",
     "multimethod (==2.1)",
     "simpleeval (==1.0.8)",
     "py-applescript (==1.0.3); sys_platform == 'darwin'",
