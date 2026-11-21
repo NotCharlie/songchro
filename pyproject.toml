@@ -13,7 +13,7 @@ dependencies = [
     "requests (==2.34.2)",
     "spotipy (==2.26.0)",
     "structlog (==26.1.0)",
-    "pyyaml (==6.0.3)",
+    "pyyaml (==6.0.4)",
     "mutagen (==1.48.1)",
     "multimethod (==2.1)",
     "simpleeval (==1.0.8)",
